@@ -1,0 +1,4 @@
+requests
+web3
+eth-abi==5.1
+ruamel.yaml==0.18.6
