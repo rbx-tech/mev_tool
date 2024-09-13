@@ -14,7 +14,7 @@ def read_file(file: str):
         return f.read()
 
 
-def read__file_json(file_path: str):
+def read_file_json(file_path: str):
     with open(file_path, 'r') as file:
         data = json.load(file)
         return data
@@ -40,3 +40,22 @@ def init_logger(path_file_config: str):
 
 def chunk_list(lst: list, chunk_size: int) -> list[list[Any]]:
     return [lst[i:i + chunk_size] for i in range(0, len(lst), chunk_size)]
+
+
+def delete_keys_from_dict(dictionary, keys):
+    for key in keys:
+        if key in dictionary:
+            del dictionary[key]
+    return dictionary
+
+def decode_rs(num: int):
+    bit_length = num.bit_length() + 1
+    uint32_bits = 32
+    u112_bits = 112
+
+    ts = num >> (bit_length - uint32_bits)
+    shift_for_second_part = bit_length - uint32_bits - u112_bits
+    rs1 = (num >> shift_for_second_part) & ((1 << u112_bits) - 1)
+    rs0 = num & ((1 << u112_bits) - 1)
+
+    return ts, rs0, rs1
