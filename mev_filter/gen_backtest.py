@@ -198,7 +198,7 @@ def process_generate(args):
 def main():
     parser = argparse.ArgumentParser(description='Generate backtest')
     parser.add_argument('--p', type=str, required=True, help='Path file bundle json')
-    parser.add_argument('--o', type=str, default='./backtest/backtest.json', help='Path file output json')
+    parser.add_argument('--o', type=str, default='./backtest/backtest.json', help='Path file bundles json')
     args = parser.parse_args()
     process_generate(args)
 

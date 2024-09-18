@@ -48,6 +48,7 @@ def delete_keys_from_dict(dictionary, keys):
             del dictionary[key]
     return dictionary
 
+
 def decode_rs(num: int):
     bit_length = num.bit_length() + 1
     uint32_bits = 32

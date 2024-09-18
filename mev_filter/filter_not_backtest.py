@@ -39,7 +39,7 @@ BLACKLIST = [
     "0x111111125421ca6dc452d289314280a0f8842a65"
 ]
 
-TOKENS = read_file_json('output/tokens_eth.json')
+TOKENS = read_file_json('config/tokens_eth.json')
 
 
 def chunk_batch(method, txs: list[str], chunk_size: int) -> list[dict]:
@@ -97,7 +97,7 @@ def filter_v2(bundles: list) -> list[dict]:
 
 
 def get_all_pairs():
-    file_path = 'output/all_pairs.json'
+    file_path = 'bundles/all_pairs.json'
     if os.path.exists(file_path):
         with open(file_path) as f:
             return json.loads(f.read())
@@ -122,11 +122,11 @@ def get_all_pairs():
 
 
 def main():
-    bundles = read_file_json('output/uniswap_v2_0_1000.json')
+    bundles = read_file_json('bundles/uniswap_v2_0_1000.json')
     print("Total bundles: ", len(bundles))
     bundles_filter = filter_v2(bundles)
     print("Total bundles filter: ", len(bundles_filter))
-    write_file_json("output/uniswap_v2_filter.json", bundles_filter)
+    write_file_json("bundles/uniswap_v2_filter.json", bundles_filter)
 
 
 if __name__ == '__main__':

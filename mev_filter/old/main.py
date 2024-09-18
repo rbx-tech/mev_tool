@@ -50,7 +50,7 @@ BLACKLIST = [
     "0x111111125421ca6dc452d289314280a0f8842a65"
 ]
 
-TOKENS = json.loads(read_file("../output/tokens_eth.json"))
+TOKENS = json.loads(read_file("../config/tokens_eth.json"))
 
 
 def process_bundles(bundles: list):
@@ -170,7 +170,7 @@ def filter_v2(w3: web3.Web3, tx_hash: str):
 
 
 def get_all_pairs():
-    file_path = '../output/all_pairs.json'
+    file_path = '../bundles/all_pairs.json'
     if os.path.exists(file_path):
         with open(file_path) as f:
             return json.loads(f.read())
@@ -219,7 +219,7 @@ if __name__ == '__main__':
         results.extend(txs)
         print(f"Found {len(txs)} arbitrage on uniswap v2 limit={limit} offset={i*limit} page={i}")
 
-        with open('../output/tx.json', 'w') as f:
+        with open('../bundles/tx.json', 'w') as f:
             f.write(json.dumps(results, indent=3))
 
         sleep(1)

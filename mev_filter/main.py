@@ -2,6 +2,7 @@ import os
 import json
 import time
 import logging
+import argparse
 import eth_abi
 import requests
 from typing import Any
@@ -9,11 +10,11 @@ from os import path
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.contract import Contract
-from utils.helper import read_file, init_logger, chunk_list, write_file_json
+from utils.helper import read_file, init_logger, chunk_list, write_file_json, read_file_json
 
-RPC_URL = 'https://rpc.ankr.com/eth'
-START = 0
-END = 2
+RPC_URL = 'http://10.7.0.58:8545'
+START = 12100
+END = 12200
 
 
 w3 = Web3(Web3.HTTPProvider(RPC_URL))
@@ -41,24 +42,15 @@ FILTER_LIST_METHOD = [
     'swapETHForExactTokens'
 ]
 
-BLACKLIST = [
-    '0xba12222222228d8ba445958a75a0704d566bf2c8',
-    '0x6000da47483062a0d734ba3dc7576ce6a0b645c4',
-    '0x111111125421ca6dc452d289314280a0f8842a65',
-    '0x4fd2d9d6ef05e13bf0b167509151a4ec3d4d4b93',
-    '0xa49b3c7c260ce8a7c665e20af8aa6e099a86cf8a',
-    '0xa65405e0dd378c65308deae51da9e3bcebb81261',
-    '0xb3284f2f22563f27cef2912637b6a00f162317c4',
-    '0x6a3b875854f5518e85ef97620c5e7de75bbc3fa0',
-    '0x661b94d96adb18646e791a06576f7905a8d1bef6',
-    '0x7350c6d00d63ab5988250aea347f277c19bea785',
-    '0x02566303a0e860ec66d3b79168459978b1b00c8e',
-    '0x408e75c26e6182476940ece5b0ba6491b4f13359',
-    '0x655ad905dec61e4fb7d4840a1f450685801511b2',
-    '0xaaf841fd6409c136fa4b960e22a92b45b26c9b41'
-]
-
-TOKENS = json.loads(read_file('./output/tokens_eth.json'))
+BLACKLIST = read_file_json('config/blacklist.json')
+BLACKLIST_METHOD = {
+    '0x908fb5ee': "Balancer",
+    '0x2170c741': "Balancer",
+    "0x0d7d75e0": "Balancer FlashLoan",
+    # '0xc2c0245e': "",
+    # '0x276856b3': True
+}
+TOKENS = read_file_json('config/tokens_eth.json')
 
 
 class Report:
@@ -67,16 +59,34 @@ class Report:
         self.count_v3 = 0
         self.count_token_gt_2 = 0
         self.count_router_v2 = 0
-        self.count_arb = 0
+        self.count_not_arb = 0
         self.blacklist = 0
+        self.count_blacklist_detail = {}
         self.count_ok = 0
         self.output_path = output_path
+
+    @staticmethod
+    def init_count():
+        return {'remaining_quantity': 0, 'removed_quantity': 0}
 
     def increase_total(self, count: int = 1):
         self.total += count
 
-    def increase_ok(self, count: int = 1):
-        self.count_ok += count
+    def get_quantity_by_attr(self, attr: str):
+        list_filter = ['count_not_arb', 'count_router_v2', 'blacklist', 'count_token_gt_2', 'count_v3']
+        remaining_quantity = self.total
+        for a in list_filter:
+            remaining_quantity -= getattr(self, a)
+            if a == attr:
+                break
+
+        return {
+            'removed_quantity': getattr(self, attr),
+            'remaining_quantity': remaining_quantity,
+        }
+
+    def increase_arb(self):
+        self.count_not_arb += 1
 
     def increase_v3(self):
         self.count_v3 += 1
@@ -87,21 +97,25 @@ class Report:
     def increase_router_v2(self):
         self.count_router_v2 += 1
 
-    def increase_arb(self):
-        self.count_arb += 1
-
-    def increase_blacklist(self):
+    def increase_blacklist(self, key: str):
         self.blacklist += 1
+        self.count_blacklist_detail[key] = self.count_blacklist_detail.get(key, 0) + 1
+
+    def increase_ok(self, count: int = 1):
+        self.count_ok += count
 
     def report(self):
         write_file_json(self.output_path, {
             'total': self.total,
-            'blacklist': self.blacklist,
-            'count_v3': self.count_v3,
-            'count_arb': self.count_arb,
-            'count_token_gt_2': self.count_token_gt_2,
-            'count_router_v2': self.count_router_v2,
-            'count_ok': self.count_ok
+            'count_ok': self.count_ok,
+            'not_arb': self.get_quantity_by_attr('count_not_arb'),
+            'not_router_v2': self.get_quantity_by_attr('count_router_v2'),
+            'blacklist': {
+                **self.get_quantity_by_attr('blacklist'),
+                'detail': self.count_blacklist_detail
+            },
+            'token_gt_2': self.get_quantity_by_attr('count_token_gt_2'),
+            'is_v3': self.get_quantity_by_attr('count_v3'),
         })
 
 
@@ -110,7 +124,7 @@ def batch_get_transaction(txs: list[str]) -> list[dict]:
     for tx in txs:
         body.append({'jsonrpc': '2.0', 'method': 'eth_getTransactionByHash', 'params': [tx], 'id': tx})
     res = requests.post(RPC_URL, json=body).json()
-    return [r['result'] for r in res]
+    return [r['result'] for r in res if r['result'] is not None]
 
 
 def batch_get_transaction_receipt(txs: list[str]) -> list[dict]:
@@ -143,44 +157,52 @@ def decode_func_call(addr: str, data: str) -> None | dict[str, Any]:
 def process_bundles(bundles: list) -> list[dict]:
     logger.info(f'Process {len(bundles)} bundles')
     reporter.increase_total(len(bundles))
-    transactions = []
 
-    def filter_bundle_arb(bundle: dict) -> bool:
-        if len(bundle['searcher_txs']) == 1 and len(bundle['txs']) == 2:
-            return True
+    bundles_map = {}
+    filter_txs = []
+    victim_tx_hashes = []
+
+    for bundle in bundles:
+        if len(bundle['searcher_txs']) == 1:
+            if len(bundle['txs']) == 1:
+                filter_txs.append({'hash': None, 'searcher_tx': bundle['searcher_txs'][0]})
+            else:
+                victim_tx_hashes.append(bundle['txs'][0])
+
+            bundles_map[bundle['txs'][0]] = bundle
         else:
             reporter.increase_arb()
 
-    bundles = list(filter(filter_bundle_arb, bundles))
-    bundles_map = {b['txs'][0]: b for b in bundles}
-
-    txs = chunk_batch(batch_get_transaction, list(bundles_map.keys()), 10)
-
-    txs_swap = []
+    txs = chunk_batch(batch_get_transaction, victim_tx_hashes, 10)
     for tx in txs:
+        if tx['to'] is None:
+            continue
+
         result = decode_func_call(Web3.to_checksum_address(tx['to']), tx['input'])
         if result is not None:
-            txs_swap.append({**tx, **result})
+            filter_txs.append({**tx, **result})
         else:
             reporter.increase_router_v2()
 
-    for tx in txs_swap:
-        bundle = bundles_map[tx['hash']]
+    transactions = []
+    for tx in filter_txs:
+        key = tx['hash'] if tx['hash'] is not None else tx['searcher_tx']
+        bundle = bundles_map[key]
         transactions.append({
             'blockNum': bundle['block_number'],
-            'blockHash': tx.get('blockHash'),
+            'blockHash': tx.get('blockHash', None),
             'timestamp': bundle['timestamp'],
-            'tx_hash': tx['hash'],
+            'tx_hash': tx.get('hash', None),
             'searcher_tx': bundle['searcher_txs'][0],
             'tx': {
-                'hash': tx['hash'],
-                'input': tx['input'],
-                'transactionIndex': int(tx['transactionIndex'], 16),
-                'from': tx['from'],
-                'to': tx['to'],
-                'value': tx['value'],
-                'funcName': tx['funcName'],
-                'funcInputs': tx['funcInputs']
+                'hash': tx.get('hash', None),
+                'input': tx.get('input', None),
+                'transactionIndex': int(tx.get('transactionIndex', '0x0'), 16),
+                'from': tx.get('from', None),
+                'to': tx.get('to', None),
+                'value': tx.get('value', None),
+                'funcName': tx.get('funcName', None),
+                'funcInputs': tx.get('funcInputs', None)
             },
             'bundle': {
                 'hash': f'https://libmev.com/bundles/{bundle['bundle_hash']}',
@@ -194,7 +216,7 @@ def process_bundles(bundles: list) -> list[dict]:
             }
         })
 
-    return transactions
+    return filter_v2(transactions)
 
 
 def filter_v2(bundles: list) -> list[dict]:
@@ -202,15 +224,25 @@ def filter_v2(bundles: list) -> list[dict]:
     txs_receipt = chunk_batch(batch_get_transaction_receipt, list(bundles_searcher_map.keys()), 10)
 
     def filter_tx_receipt(receipt) -> bool:
+        if receipt['status'] != '0x1':
+            reporter.increase_arb()
+            logger.info(f'tx: {receipt['transactionHash']} - Status fail')
+            return False
+
         v3_data_types = ['int256', 'int256', 'uint160', 'uint128', 'int24']
-        v2_data_types = ['uint256', 'uint256', 'uint256', 'uint256']
         count_token = set()
         for l in receipt['logs']:
             address = l['address']
             if address in BLACKLIST:
-                reporter.increase_blacklist()
-                logger.info(f'tx: {receipt['transactionHash']} - Blacklist')
+                reporter.increase_blacklist(BLACKLIST[address])
+                logger.info(f'tx: {receipt['transactionHash']} - Blacklist {BLACKLIST[address]}')
                 return False
+
+            if l['topics'][0][:10] in BLACKLIST_METHOD:
+                reporter.increase_blacklist(BLACKLIST_METHOD[l['topics'][0][:10]])
+                logger.info(f'tx: {receipt['transactionHash']} - Blacklist method')
+                return False
+
             if address in TOKENS:
                 count_token.add(address)
             if len(count_token) > 2:
@@ -225,15 +257,6 @@ def filter_v2(bundles: list) -> list[dict]:
             except Exception:
                 pass
 
-            try:
-                eth_abi.decode(v2_data_types, HexBytes(l['data']))
-                if all_pairs[address] is None:
-                    logger.info(f'tx: {receipt['transactionHash']} - Pair not found')
-                    return False
-                continue
-            except Exception as e:
-                continue
-
         logger.info(f'tx: {receipt['transactionHash']} - OK')
         return True
 
@@ -244,54 +267,68 @@ def filter_v2(bundles: list) -> list[dict]:
     return result
 
 
-def get_all_pairs():
-    file_path = 'output/all_pairs.json'
-    if os.path.exists(file_path):
-        with open(file_path) as f:
-            return json.loads(f.read())
-
-    factory_factory: Contract = contracts[UNI_FACTORY_ADDR]
-    pair_length = factory_factory.caller.call_function(factory_factory.get_function_by_name('allPairsLength'))
-
-    all_pairs = {}
-    query_factory: Contract = contracts[UNI_QUERY_ADDR]
-    func = query_factory.get_function_by_name('getPairsByIndexRange')
-    index = 0
-    while True:
-        if index > pair_length:
-            break
-        pairs = query_factory.caller.call_function(func, UNI_FACTORY_ADDR, index, index + 1000)
-        for [x, y, addr] in pairs:
-            all_pairs[addr] = [x, y]
-        print(f'Added {len(pairs)} pairs')
-        index += 1000
-
-    with open(file_path, 'w') as f:
-        f.write(json.dumps(all_pairs))
+def request_libmev(limit: int = 50, offset: int = 0) -> list[dict]:
+    now_seconds = int(time.time())
+    content = requests.get(
+        f'https://api.libmev.com/v1/bundles?timestampRange=1663224162,{now_seconds}&filterByTags=naked_arb,backrun&limit={limit}&offset={offset}&orderByDesc=block_number')
+    return json.loads(content.text).get('data', [])
 
 
-if __name__ == '__main__':
-    logger = logging.getLogger()
-    path_config = path.join(path.dirname(__file__), 'log_config.yml')
-    init_logger(path_config)
-    reporter = Report(f'output/tx_{START}_{END}_report.json')
+def fetch_data_and_save_to_json():
+    results = []
+    for i in range(START, END):
+        print(f'Process page: {i}')
+        bundles = request_libmev(50, i * 50)
+        results.extend(bundles)
+    write_file_json(f'bundles/bundles_{START}_{END}.json', results)
 
-    all_pairs = get_all_pairs()
+
+def run_from_json():
+    file_path = f'bundles/bundles_{START}_{END}.json'
+    if not os.path.exists(file_path):
+        fetch_data_and_save_to_json()
+
+    result = []
+    chunks = chunk_list(read_file_json(file_path), 50)
+    for chunk in chunks:
+        bundles_filter = process_bundles(chunk)
+        bundles_filter_len = len(bundles_filter)
+        result.extend(bundles_filter)
+
+        reporter.increase_ok(bundles_filter_len)
+        logger.info(f'Found {bundles_filter_len} arbitrage on uniswap v2')
+        write_file_json(f'bundles/bundles_filter_{START}_{END}.json', result)
+        reporter.report()
+
+
+def run_from_api():
     results = []
     limit = 50
     for i in range(START, END):
-        now_seconds = int(time.time())
-        content = requests.get(
-            f'https://api.libmev.com/v1/bundles?timestampRange=1663224162,{now_seconds}&filterByTags=naked_arb,backrun&limit={limit}&offset={limit * i}&orderByDesc=block_number')
-        bundles_json = json.loads(content.text).get('data', [])
-
-        bundles = process_bundles(bundles_json)
-        bundles_filter = filter_v2(bundles)
+        bundles_json = request_libmev(limit, i * limit)
+        bundles_filter = process_bundles(bundles_json)
         bundles_filter_len = len(bundles_filter)
         results.extend(bundles_filter)
 
         reporter.increase_ok(bundles_filter_len)
         logger.info(f'Found {bundles_filter_len} arbitrage on uniswap v2 limit={limit} offset={i * limit} page={i}')
-        logger.info('=======================================================================================================')
-        write_file_json(f'output/tx_{START}_{END}.json', results)
+        logger.info(
+            '=======================================================================================================')
+        write_file_json(f'bundles/bundles_filter_{START}_{END}.json', results)
         reporter.report()
+
+
+if __name__ == '__main__':
+    logger = logging.getLogger()
+    path_config = path.join(path.dirname(__file__), 'config/log_config.yml')
+    init_logger(path_config)
+    reporter = Report(f'bundles/bundles_filter_{START}_{END}_report.json')
+
+    parser = argparse.ArgumentParser(description='A simple CLI tool.')
+    parser.add_argument('--mode', type=str, help='Mode crawler libmev', default='api')
+    args = parser.parse_args()
+
+    if args.mode == 'json':
+        run_from_json()
+    else:
+        run_from_api()

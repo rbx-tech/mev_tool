@@ -35,7 +35,7 @@ BLACKLIST = [
     "0x111111125421ca6dc452d289314280a0f8842a65"
 ]
 
-TOKENS = json.loads(read_file("./output/tokens_eth.json"))
+TOKENS = json.loads(read_file("config/tokens_eth.json"))
 
 
 def batch_get_transaction(txs: list[str]) -> list[dict]:
