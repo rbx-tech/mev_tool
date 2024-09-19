@@ -5,3 +5,8 @@ mev_filter/backtest
 mev_filter/bundles
 mev_filter/pairs
 mev_filter/config
+
+mev_data/log
+mev_data/.idea
+mev_data/config
+mev_data/.env
