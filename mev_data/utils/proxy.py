@@ -2,7 +2,7 @@ import random
 import ipaddress
 import secrets
 import logging
-from utils.helper import write_file_json
+
 
 class ProxyV6:
     def __init__(self):
@@ -16,7 +16,6 @@ class ProxyV6:
     def generate_proxies(self):
         bot_id = int.from_bytes(secrets.token_bytes(8), byteorder='big')
         ip = self.gen_random_ip(bot_id)
-        self.debug_proxy(ip)
         proxy = f'socks5h://inf-ip-{ip.replace(":", "%3A")}:{self.password}@{self.ip}:{self.port}'
         return {
             'http': proxy,
@@ -38,7 +37,3 @@ class ProxyV6:
         new_ip_int = base_ip + sub_id * sub_step + sub_addr
         new_ip = ipaddress.IPv6Address(new_ip_int)
         return str(new_ip) if to_str else new_ip
-
-    def debug_proxy(self, ip: str):
-        self.debug[ip] = self.debug.get(ip, 0) + 1
-        write_file_json('log/proxy.json', self.debug)

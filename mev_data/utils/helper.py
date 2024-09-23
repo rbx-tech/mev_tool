@@ -45,7 +45,7 @@ def init_logger(path_file_config: str, filename: str = ''):
     logging.config.dictConfig(log_config)
 
 
-def chunk_list(lst: list, chunk_size: int) -> list[list[Any]]:
+def chunk_list(lst: list, chunk_size: int = 50) -> list[list[Any]]:
     return [lst[i:i + chunk_size] for i in range(0, len(lst), chunk_size)]
 
 
@@ -67,3 +67,7 @@ def decode_rs(num: int):
     rs0 = num & ((1 << u112_bits) - 1)
 
     return ts, rs0, rs1
+
+
+def hex_to_int(value):
+    return int(value, 16) if value is not None else None

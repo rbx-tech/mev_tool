@@ -1,34 +1,40 @@
 import logging
-import time
 import threading
-import queue
 from os import path, getenv
 from dotenv import load_dotenv
-from db.postgre import Postgres
 from utils.helper import init_logger
-from manage.bundle import BundleManager
-from manage.tx import TxManager
+from db import Postgres
+from models import Tasks, Txs, Bundles, BundleTasks, TxFilters, TxInputs
+from manage import BundleManager, TxManager, TxFilterManager, DecodeInputManager
 
 load_dotenv()
+
 
 class Main:
     def __init__(self):
         self.db = Postgres(getenv('DSN_POSTGRES'), 16)
-        self.managers = [BundleManager(self.db), TxManager(self.db)]
+        self.threads = []
+        self.managers = [
+            # BundleManager(),
+            # TxManager(),
+            # TxFilterManager(),
+            DecodeInputManager()
+        ]
 
     def prepare(self):
-        self.db.create_table_bundles()
-        self.db.create_table_txs()
-        self.db.create_table_tasks()
+        models = [TxFilters, Txs, Tasks, Bundles, BundleTasks, TxInputs]
+        for model in models:
+            model().create_table()
 
     def run(self):
         self.prepare()
         for manager in self.managers:
             t = threading.Thread(target=manager.run)
             t.start()
+            self.threads.append(t)
 
-        while True:
-            time.sleep(3600)
+        for t in self.threads:
+            t.join()
 
 
 if __name__ == '__main__':

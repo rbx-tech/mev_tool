@@ -21,7 +21,7 @@ class TxWorker(threading.Thread):
                 self.logger.info(f'{self.name} stopped')
                 break
             try:
-                txs = self.rpc.batch_request_get_tx_by_hashes(tx_hashes)
+                txs = self.rpc.batch_get_tx_by_hashes(tx_hashes)
                 self.db.batch_insert_txs(txs)
                 self.task_done_queue.put(True)
             except Exception as err:

@@ -1,7 +1,7 @@
-import logging
 import time
 import queue
-from db.postgre import Postgres
+import logging
+from db import Postgres
 from os import getenv
 from worker.tx import TxWorker
 

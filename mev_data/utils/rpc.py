@@ -34,8 +34,22 @@ class RPC:
         body = RPC.make_body('eth_getTransactionReceipt', [tx_hash])
         return requests.post(self.rpc_url, json=body).json()['result']
 
-    def batch_request_get_tx_by_hashes(self, hashes: list):
+    def batch_get_tx_by_hashes(self, hashes: list):
         body = [self.make_body('eth_getTransactionByHash', [h], h) for h in hashes]
         res = requests.post(self.rpc_url, json=body)
         res.raise_for_status()
-        return [r['result'] for r in res.json()]
+
+        result = []
+        for r in res.json():
+            if r['result']:
+                result.append(r['result'])
+            else:
+                result.append({'blockNumber': 2, 'hash': r['id']})
+
+        return result
+
+    def batch_get_tx_receipts(self, hashes: list):
+        body = [self.make_body('eth_getTransactionReceipt', [h], h) for h in hashes]
+        res = requests.post(self.rpc_url, json=body)
+        res.raise_for_status()
+        return [r.get('result', None) for r in res.json()]
