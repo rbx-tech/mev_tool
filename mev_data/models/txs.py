@@ -1,6 +1,6 @@
 import logging
 from db import Postgres
-from utils.helper import chunk_list, hex_to_int
+from utils import chunk_list, hex_to_int
 
 
 class Txs:
@@ -8,6 +8,7 @@ class Txs:
         self.db = Postgres.get_instance()
         self.logger = logging.getLogger()
 
+    # CREATE TYPE tx_kind AS ENUM ('mev', 'victim');
     def create_table(self):
         query = """
             CREATE TABLE IF	NOT EXISTS txs (
@@ -26,6 +27,7 @@ class Txs:
                 nonce INTEGER,
                 transaction_index SMALLINT,
                 "type" SMALLINT,
+                kind tx_kind,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -48,6 +50,7 @@ class Txs:
             FROM txs t
             LEFT JOIN tx_inputs ti ON t.tx_hash = ti.tx_hash
             WHERE ti.tx_hash IS NULL AND t."to" = '{to}'
+            ORDER BY t.created_at ASC
             LIMIT {limit}
         """
         return self.db.query(query)
@@ -101,6 +104,15 @@ class Txs:
         for c in chunks:
             self.db.batch_insert(query, c)
 
+    def update_kind(self, tx_hashes):
+        query = """
+            UPDATE txs
+            SET kind = 'mev'
+            WHERE tx_hash = ANY(%s)
+        """
+
+        self.db.execute(query, (tx_hashes,))
+
     def batch_insert_txs_empty(self, bundles):
         batch = []
 
@@ -119,7 +131,6 @@ class Txs:
             ON CONFLICT (tx_hash) DO NOTHING
         """
 
-        self.logger.debug(f'Inserting {len(batch)} txs')
         chunks = chunk_list(batch, 1000)
         for c in chunks:
             self.db.batch_insert(query, c)

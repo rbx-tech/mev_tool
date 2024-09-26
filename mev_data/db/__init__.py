@@ -52,11 +52,11 @@ class Postgres:
         finally:
             self.pool.putconn(conn)
 
-    def execute(self, query):
+    def execute(self, query, data=None):
         conn = self.pool.getconn()
         try:
             cur = conn.cursor()
-            cur.execute(query)
+            cur.execute(query, data)
             conn.commit()
             cur.close()
         finally:

@@ -2,10 +2,10 @@ import logging
 import threading
 from os import path, getenv
 from dotenv import load_dotenv
-from utils.helper import init_logger
+from utils import init_logger
 from db import Postgres
-from models import Tasks, Txs, Bundles, BundleTasks, TxFilters, TxInputs
-from manage import BundleManager, TxManager, TxFilterManager, DecodeInputManager
+from models import Tasks, Txs, Bundles, BundleTasks, TxFilters, TxInputs, TxLogs
+from manage import BundleManager, TxManager, TxFilterManager, TxInputManager, TxKindManager, TxLogManager
 
 load_dotenv()
 
@@ -18,11 +18,12 @@ class Main:
             # BundleManager(),
             # TxManager(),
             # TxFilterManager(),
-            DecodeInputManager()
+            # TxInputManager()
+            TxLogManager()
         ]
 
     def prepare(self):
-        models = [TxFilters, Txs, Tasks, Bundles, BundleTasks, TxInputs]
+        models = [TxFilters, Txs, Tasks, Bundles, BundleTasks, TxInputs, TxLogs]
         for model in models:
             model().create_table()
 

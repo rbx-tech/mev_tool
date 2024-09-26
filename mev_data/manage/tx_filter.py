@@ -1,8 +1,8 @@
 import logging
 from os import getenv
 from utils.rpc import RPC
+from utils import chunk_list, read_file_json
 from models import Bundles, Tasks, TxFilters
-from utils.helper import chunk_list, read_file_json
 
 
 class TxFilterManager:
@@ -57,6 +57,9 @@ class TxFilterManager:
 
         receipts = self.rpc.batch_get_tx_receipts(searcher_hashes)
         for receipt in receipts:
+            if receipt is None:
+                continue
+
             if receipt['status'] == '0x1':
                 tx_hash = receipt['transactionHash']
                 temp = {
