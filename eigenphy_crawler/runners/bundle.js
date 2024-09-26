@@ -73,7 +73,7 @@ export async function run_crawl_bundles() {
                     const victimTx = (bData.tokenFlowCharts || []).find((it) => it.sandwichRole == 'Victim')?.txMeta?.transactionHash;
                     raws.push({
                         _id: id,
-                        signals: nul,
+                        signals: null,
                         victimTx: victimTx,
                         ...bData,
                     });

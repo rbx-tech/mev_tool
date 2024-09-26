@@ -2,9 +2,21 @@ services:
   mongo:
     container_name: eigenmongo
     image: mongo
+    command: mongod --port 27018
+    volumes:
+      - './data/db:/data/db'
     restart: always
     # environment:
     #   MONGO_INITDB_ROOT_USERNAME: root
     #   MONGO_INITDB_ROOT_PASSWORD: example
     ports:
-      - "27017:27017"
+      - "27018:27018"
+
+  nodejs:
+    container_name: eigencrawler
+    build: .
+    depends_on:
+      - mongo
+    environment:
+      - MONGO_URI=mongodb://eigenmongo:27018/eigenphy?authSource=admin
+
