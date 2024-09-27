@@ -16,7 +16,6 @@ class BundleWorker(threading.Thread):
         self.logger.info(f'{self.name} started')
         while True:
             task_id, start_time, end_time = self.task_queue.get()
-            print(task_id, start_time, end_time)
             if start_time <= 0:
                 self.logger.info(f'{self.name} stopped')
                 break
@@ -29,7 +28,7 @@ class BundleWorker(threading.Thread):
                 self.task_done_queue.put(False)
 
     def stop(self):
-        self.task_done_queue.put(False)
+        pass
 
     def get_bundles_past_hour(self, start_time, end_time):
         bundles = []

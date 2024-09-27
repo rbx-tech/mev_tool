@@ -1,5 +1,5 @@
 from db import Postgres
-from utils.helper import chunk_list
+from utils import chunk_list
 
 
 class TxFilters:
@@ -13,7 +13,8 @@ class TxFilters:
                 is_v3 BOOLEAN DEFAULT FALSE,
                 token_gt_2 BOOLEAN DEFAULT FALSE,
                 addresses VARCHAR(42)[] DEFAULT NULL,
-                address_names VARCHAR(100)[] DEFAULT NULL,
+                pairs VARCHAR(42)[] DEFAULT NULL,
+                pair_names VARCHAR(100)[] DEFAULT NULL,
                 tokens VARCHAR(42)[] DEFAULT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

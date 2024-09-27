@@ -1,6 +1,6 @@
 import json
 from db import Postgres
-from utils.helper import chunk_list
+from utils import chunk_list
 
 
 class Bundles:
@@ -35,15 +35,15 @@ class Bundles:
 
     def get_latest_bundle_timestamp(self):
         query = """
-            SELECT timestamp FROM bundles ORDER BY "timestamp" DESC LIMIT 1
+            SELECT MAX(timestamp) FROM bundles
         """
-        return self.db.query(query)
+        return self.db.query(query)[0][0]
 
     def get_oldest_bundle_timestamp(self):
         query = """
-            SELECT timestamp FROM bundles ORDER BY "timestamp" ASC LIMIT 1
+            SELECT MIN(timestamp) FROM bundles
         """
-        return self.db.query(query)
+        return self.db.query(query)[0][0]
 
     def get_paginated(self, page: int = 1, limit: int = 50):
         page = page if page > 0 else 1

@@ -4,6 +4,7 @@ import logging
 from requests.exceptions import HTTPError, RequestException
 from utils.proxy import ProxyV6
 
+
 class LibMev:
     def __init__(self):
         self.logger = logging.getLogger()

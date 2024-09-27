@@ -5,9 +5,8 @@ from utils.rpc import RPC
 
 
 class TxWorker(threading.Thread):
-    def __init__(self, db, task_queue, task_done_queue, *args, **kwargs):
+    def __init__(self, task_queue, task_done_queue, *args, **kwargs):
         threading.Thread.__init__(self, *args, **kwargs)
-        self.db = db
         self.rpc: RPC = RPC(getenv('RPC_URL'))
         self.logger = logging.getLogger()
         self.task_queue = task_queue
@@ -22,8 +21,7 @@ class TxWorker(threading.Thread):
                 break
             try:
                 txs = self.rpc.batch_get_tx_by_hashes(tx_hashes)
-                self.db.batch_insert_txs(txs)
-                self.task_done_queue.put(True)
+                self.task_done_queue.put(txs)
             except Exception as err:
                 self.logger.error(f'{self.name} - {err}')
                 self.task_queue.put(tx_hashes)
