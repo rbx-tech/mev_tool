@@ -27,6 +27,10 @@ class MongoDb {
     return this.db.collection('pools');
   }
 
+  get transactionsCol() {
+    return this.db.collection('transactions');
+  }
+
 }
 
 export const mongoDb = new MongoDb();

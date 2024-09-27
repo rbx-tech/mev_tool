@@ -51,7 +51,9 @@ export async function runCrawlBundles() {
             const docData = doc.data();
             const insertedDoc = await mongoDb.bundlesCol.findOne({ _id: id });
             if (insertedDoc) {
-                promises.push((async () => [docData, insertedDoc, true])());
+                if (!insertedDoc.rawData) {
+                    promises.push((async () => [docData, insertedDoc, true])());
+                }
             } else {
                 promises.push((async () => {
                     const res = await axios.get(`https://storage.googleapis.com/eigenphi-ethereum-tx/${id}`).then().catch((e) => null);
@@ -60,10 +62,15 @@ export async function runCrawlBundles() {
             }
         }
 
+        if (!promises.length) {
+            continue;
+        }
+
         const bundlesResults = await Promise.all(promises);
         const bundles = [];
         const tokens = {};
         const pools = {};
+        let transactions = {};
         let replaceCnt = 0;
         for (let i = 0; i < bundlesResults.length; i++) {
             let [docData, rawData, isExisted] = bundlesResults[i];
@@ -86,7 +93,11 @@ export async function runCrawlBundles() {
                     decimals: t.decimals,
                 };
             }
-            const bundle = parseRawData(rawData, docData);
+            const [bundle, txDetails] = parseRawData(rawData, docData);
+            transactions = {
+                ...transactions,
+                ...txDetails,
+            }
             if (isExisted) {
                 replaceCnt += 1;
                 await mongoDb.bundlesCol.replaceOne({_id: bundle._id}, bundle);
@@ -94,15 +105,21 @@ export async function runCrawlBundles() {
                 bundles.push(bundle);
             }
         }
-        const result = await mongoDb.bundlesCol.insertMany(bundles);
-        console.log(`Inserted ${result.insertedCount}, replace ${replaceCnt} bundles`);
+
+        if (bundles.length) {
+            const result = await mongoDb.bundlesCol.insertMany(bundles);
+            console.log(`Inserted ${result.insertedCount}, replace ${replaceCnt} bundles`);
+        }
         if (Object.keys(pools).length) {
             const existsIds = await mongoDb.poolsCol.distinct('_id', {_id: {$in: Object.keys(pools)}});
             for (const id of existsIds) {
                 delete pools[id];
             }
-            const result = await mongoDb.poolsCol.insertMany(Object.values(pools));
-            console.log(`Inserted ${result.insertedCount} pools`);
+            const poolsList = Object.values(pools);
+            if (poolsList.length) {
+                const result = await mongoDb.poolsCol.insertMany(poolsList);
+                console.log(`Inserted ${result.insertedCount} pools`);
+            }
         }
 
         if (Object.keys(tokens).length) {
@@ -110,8 +127,23 @@ export async function runCrawlBundles() {
             for (const id of existsIds) {
                 delete tokens[id];
             }
-            const result = await mongoDb.tokensCol.insertMany(Object.values(tokens));
-            console.log(`Inserted ${result.insertedCount} tokens`);
+            const tokensList = Object.values(tokens);
+            if (tokensList.length) {
+                const result = await mongoDb.tokensCol.insertMany(tokensList);
+                console.log(`Inserted ${result.insertedCount} tokens`);
+            }
+        }
+
+        if (Object.keys(transactions).length) {
+            const existsIds = await mongoDb.transactionsCol.distinct('_id', {_id: {$in: Object.keys(transactions)}});
+            for (const id of existsIds) {
+                delete transactions[id];
+            }
+            const transactionsList = Object.values(transactions);
+            if (transactionsList.length) {
+                const result = await mongoDb.transactionsCol.insertMany(transactionsList);
+                console.log(`Inserted ${result.insertedCount} transactions`);
+            }
         }
 
         promises = [];
@@ -160,28 +192,58 @@ function parseRawData(rawData, docData) {
     }
     const poolIds = rawData.pools.map((e) => e.address);
     const tokenIds = rawData.tokens.map((e) => e.address);
-    let txs = null;
-    let searcherTxs = [rawData.txMeta.transactionHash];
+    const txHash = rawData.txMeta?.transactionHash;
+
+    let txIds = null;
+    let searcherTxs = [txHash];
     let signalTxs = null;
 
+    let txDetails = {};
+
     if (rawData.tokenFlowCharts?.length) {
-        let txs = [];
-        let searcherTxs = [];
-        let signalTxs = [];
+        txIds = [];
+        searcherTxs = [];
+        signalTxs = [];
         for (const fl of rawData.tokenFlowCharts) {
             const txHash = fl.txMeta.transactionHash;
-            txs.push(txHash)
+            const tx = {
+                _id: txHash,
+                blockNumber: fl.txMeta.blockNumber,
+                bundleId: id,
+                transactionIndex: fl.txMeta.transactionIndex,
+                tag: "victim",
+                protocols: null,
+                sandwichRole: fl.sandwichRole.toLowerCase(),
+                contractName: null,
+                inputDecoded: null,
+                detailRaw: null,
+            };
+            txIds.push(txHash)
             if (fl.sandwichRole == 'Victim') {
                 signalTxs.push(txHash)
             } else {
+                tx.tag = "searcher";
                 searcherTxs.push(txHash)
             }
+            txDetails[txHash] = tx;
         }
-        txs = rawData.tokenFlowCharts.map((e) => e.txMeta.transactionHash);
+        txIds = rawData.tokenFlowCharts.map((e) => e.txMeta.transactionHash);
         signalTxs = rawData.tokenFlowCharts.map((e) => e.sandwichRole == 'Victim' ? e.txMeta.transactionHash : null).filter((e) => e);
+    } else {
+        txDetails[txHash] = {
+            _id: txHash,
+            bundleId: id,
+            blockNumber: rawData.txMeta.blockNumber,
+            transactionIndex: rawData.txMeta.transactionIndex,
+            tag: "victim",
+            protocols: null,
+            contractName: null,
+            inputDecoded: null,
+            detailRaw: null,
+        };
     }
 
-    return {
+    const bundle = {
         _id: id,
         timestamp: rawData.txMeta.blockTimestamp,
         blockNumber: rawData.txMeta.blockNumber,
@@ -197,10 +259,11 @@ function parseRawData(rawData, docData) {
         tokens: tokenIds,
         pools: poolIds,
         useFlashloan: docData.useFlashloan,
-        txs: txs,
+        txs: txIds,
         signalTxs: signalTxs,
         searcherTxs: searcherTxs,
         source: "eigenphy",
         rawData: rawData,
     };
+    return [bundle, txDetails]
 }
