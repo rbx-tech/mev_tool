@@ -2,7 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs, getCountFromServer, startAfter, query, limit, getDoc, doc } from 'firebase/firestore';
 import { mongoDb } from '../mongo.js';
 import axios from 'axios';
-import { sleep } from '../utils/index.js'
+import { sleep, removeDuplicate } from '../utils/index.js'
 
 const firebaseConfig = {
     apiKey: "AIzaSyAvFmPvlucS0n9Itaw3h9taenFHM3u_-Js",
@@ -185,13 +185,6 @@ function parseRawData(rawData, docData) {
     delete rawData.tokens;
     delete rawData.victimTx;
     delete rawData._id;
-    rawData = {
-        ...rawData,
-        pools: docData?.poolsInfo || [],
-        tokens: docData?.tokens || [],
-    }
-    const poolIds = rawData.pools.map((e) => e.address);
-    const tokenIds = rawData.tokens.map((e) => e.address);
     const txHash = rawData.txMeta?.transactionHash;
 
     let txIds = null;
@@ -199,11 +192,14 @@ function parseRawData(rawData, docData) {
     let signalTxs = null;
 
     let txDetails = {};
+    const poolIds = (docData?.poolsInfo || []).map((e) => e.address);
+    const tokenIds = (docData?.tokens || []).map((e) => e.address);
+    const protocols = removeDuplicate((docData?.poolsInfo || []).map((e) => e.protocol?.name));
 
     if (rawData.tokenFlowCharts?.length) {
-        txIds = [];
-        searcherTxs = [];
-        signalTxs = [];
+        let txIds = [];
+        let searcherTxs = [];
+        let signalTxs = [];
         for (const fl of rawData.tokenFlowCharts) {
             const txHash = fl.txMeta.transactionHash;
             const tx = {
@@ -218,6 +214,11 @@ function parseRawData(rawData, docData) {
                 inputDecoded: null,
                 detailRaw: null,
             };
+            if (fl.resultId == id) {
+                tx.tokens = tokenIds;
+                tx.pools = poolIds;
+                tx.protocols = protocols;
+            }
             txIds.push(txHash)
             if (fl.sandwichRole == 'Victim') {
                 signalTxs.push(txHash)
@@ -235,8 +236,10 @@ function parseRawData(rawData, docData) {
             bundleId: id,
             blockNumber: rawData.txMeta.blockNumber,
             transactionIndex: rawData.txMeta.transactionIndex,
-            tag: "victim",
-            protocols: null,
+            tag: "searcher",
+            protocols: protocols,
+            tokens: tokenIds,
+            pools: poolIds,
             contractName: null,
             inputDecoded: null,
             detailRaw: null,
@@ -256,8 +259,6 @@ function parseRawData(rawData, docData) {
         builderName: null,
         builderAddress: null,
         types: (rawData.summary?.types || []).map((e) => e.toLowerCase()),
-        tokens: tokenIds,
-        pools: poolIds,
         useFlashloan: docData.useFlashloan,
         txs: txIds,
         signalTxs: signalTxs,

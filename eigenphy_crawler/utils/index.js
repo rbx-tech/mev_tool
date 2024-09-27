@@ -11,3 +11,7 @@ export function chunkArray(array, chunkSize = 10) {
   }
   return chunks;
 }
+
+export function removeDuplicate(array) {
+  return [...new Set(array)]
+}
