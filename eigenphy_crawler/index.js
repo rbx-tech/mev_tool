@@ -1,9 +1,11 @@
-import {run_crawl_bundles} from './runners/index.js'
+import {runCrawlBundles} from './runners/index.js'
+import {mongoDb} from './mongo.js'
 
 async function run() {
+    await mongoDb.connect();
+    console.log('Connected to database');
     await Promise.all([
-        run_crawl_bundles(),
-        // run_crawl_signals(),
+        runCrawlBundles(),
     ]);
 }
 

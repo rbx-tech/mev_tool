@@ -19,6 +19,14 @@ class MongoDb {
     return this.db.collection('info');
   }
 
+  get tokensCol() {
+    return this.db.collection('tokens');
+  }
+
+  get poolsCol() {
+    return this.db.collection('pools');
+  }
+
 }
 
 export const mongoDb = new MongoDb();
