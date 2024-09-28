@@ -50,7 +50,8 @@ class TxLogManager:
             for log in receipt.get('logs', []):
                 result.append((
                     log['transactionHash'],
-                    log['topics'][0],
+                    log['address'],
+                    log['topics'][0][:10],
                     log['topics'],
                     log['data'],
                     int(log['logIndex'], 16),

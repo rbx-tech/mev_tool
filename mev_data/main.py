@@ -4,8 +4,8 @@ from os import path, getenv
 from dotenv import load_dotenv
 from utils import init_logger
 from db import Postgres
-from models import Tasks, Txs, Bundles, BundleTasks, TxFilters, TxInputs, TxLogs
-from manage import BundleManager, TxManager, TxFilterManager, TxInputManager, TxKindManager, TxLogManager
+from models import Tasks, Txs, Bundles, BundleTasks, TxFilters, TxInputs, TxLogs, TokenPrices
+from manage import TokenPriceManager
 
 load_dotenv()
 
@@ -15,15 +15,11 @@ class Main:
         self.db = Postgres(getenv('DSN_POSTGRES'), 16)
         self.threads = []
         self.managers = [
-            # BundleManager(),
-            # TxManager(),
-            # TxFilterManager(),
-            # TxInputManager()
-            TxLogManager()
+            TokenPriceManager()
         ]
 
     def prepare(self):
-        models = [TxFilters, Txs, Tasks, Bundles, BundleTasks, TxInputs, TxLogs]
+        models = [TxFilters, Txs, Tasks, Bundles, BundleTasks, TxInputs, TxLogs, TokenPrices]
         for model in models:
             model().create_table()
 

@@ -6,13 +6,11 @@ class Tasks:
     def __init__(self):
         self.db = Postgres.get_instance()
 
-    # CREATE TYPE task_kind AS ENUM ('bundle', 'tx', 'tx_filter');
-    # ALTER TABLE tasks ADD CONSTRAINT unique_kind UNIQUE (kind);
     def create_table(self):
         query = """
             CREATE TABLE IF	NOT EXISTS tasks (
                 id SERIAL PRIMARY KEY,
-                kind task_kind NOT NULL,
+                kind VARCHAR(100) NOT NULL,
                 extra JSONB,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -28,7 +26,22 @@ class Tasks:
         """
         return self.db.find_one(query)
 
+    def get_all_by_prefix(self, kind: str):
+        query = f"""
+            SELECT * FROM tasks
+            WHERE kind LIKE '{kind}%'
+        """
+        return self.db.query(query)
+
     def create(self, kind: str, extra: dict):
+        query = f"""
+            INSERT INTO tasks (kind, extra)
+            VALUES ('{kind}', '{json.dumps(extra)}')
+            ON CONFLICT (kind) DO NOTHING
+        """
+        self.db.execute(query)
+
+    def create_or_update(self, kind: str, extra: dict):
         query = f"""
             INSERT INTO tasks (kind, extra)
             VALUES ('{kind}', '{json.dumps(extra)}')
