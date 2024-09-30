@@ -36,8 +36,8 @@ export async function runCrawlSignals() {
         console.log(`Get signal of ${tx._id} error`, res);
         await mongoDb.transactionsCol.updateOne({ _id: tx._id }, {
           $set: {
-            signalScanned: true,
-            error: true,
+            "eigenphy.signalScanned": true,
+            "eigenphy.error": true,
           },
         });
         continue;
