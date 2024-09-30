@@ -1,4 +1,4 @@
-import {runCrawlBundles} from './runners/index.js'
+import {runCrawlBundles, runCrawlSignals} from './runners/index.js'
 import {mongoDb} from './mongo.js'
 
 async function run() {
@@ -6,7 +6,9 @@ async function run() {
     console.log('Connected to database');
     await Promise.all([
         runCrawlBundles(),
+        runCrawlSignals(),
     ]);
+    process.exit(0);
 }
 
 run();

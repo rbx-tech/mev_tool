@@ -59,14 +59,22 @@ const token = {
 // collection transactions
 const txDetail = {
   _id: "0x410c53e1ab774756802145a163a3dde8f6cc35850b34d8c333fc78d8ea2644ea",
-  bundleId: "0x07fde7cd31b989193d60f3ac8f44035a9855271b0bf58df2836de9b196fa1039",
   blockNumber: 20431521,
   contractName: "UniswapV2Router02", // Put contract addr if cannot detect their name
-  tag: "victim", // or searcher
+  libMev: { // Undefined if this tx is not from livMev
+    bundleId: "0x07fde7cd31b989193d60f3ac8f44035a9855271b0bf58df2836de9b196fa1039",
+    tag: "victim", // or searcher,
+    sandwichRole: "backrun", // frontrun, victim, ... or null if not sandwich,
+    // other data
+  },
+  eigenphy: { // Undefined if this tx is not from eigenphy
+    bundleId: "0x07fde7cd31b989193d60f3ac8f44035a9855271b0bf58df2836de9b196fa1039",
+    tag: "victim", // or searcher,
+    sandwichRole: "backrun", // frontrun, victim, ... or null if not sandwich
+  },
   protocols: ["Uniswap V2"],
   transactionIndex: 1,
-  sandwichRole: "backrun", // frontrun, victim, ... or null if not sandwich
-  inputDecoded: { // Null if cannot decode
+  inputDecoded: { // Null if cannot decoded
       func: "swapExactETHForTokens",
       args: [
           "19420000000000000000000",
@@ -78,7 +86,7 @@ const txDetail = {
           1722267656,
       ]
   },
-  detailRaw: {
+  raw: {
     blockHash: "0xcb0c5940e176fb21ddb7bd0b56838eb155a3e2347e9f14bf66d7cc2d647cc3fd",
     from: "0x4d8b18f25Be24F19E9Af37DfeF0d2941066f3a17",
     to: "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",

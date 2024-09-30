@@ -152,8 +152,6 @@ export async function runCrawlBundles() {
         setLastCusor(lastCusor);
         await sleep(2000);
     }
-
-    process.exit(0);
 }
 
 
@@ -205,14 +203,16 @@ function parseRawData(rawData, docData) {
             const tx = {
                 _id: txHash,
                 blockNumber: fl.txMeta.blockNumber,
-                bundleId: id,
                 transactionIndex: fl.txMeta.transactionIndex,
-                tag: "victim",
                 protocols: null,
-                sandwichRole: fl.sandwichRole.toLowerCase(),
                 contractName: null,
                 inputDecoded: null,
-                detailRaw: null,
+                raw: null,
+                eigenphy: {
+                    bundleId: id,
+                    tag: "victim",
+                    sandwichRole: fl.sandwichRole.toLowerCase(),
+                }
             };
             if (fl.resultId == id) {
                 tx.tokens = tokenIds;
@@ -233,16 +233,18 @@ function parseRawData(rawData, docData) {
     } else {
         txDetails[txHash] = {
             _id: txHash,
-            bundleId: id,
             blockNumber: rawData.txMeta.blockNumber,
             transactionIndex: rawData.txMeta.transactionIndex,
-            tag: "searcher",
             protocols: protocols,
             tokens: tokenIds,
             pools: poolIds,
             contractName: null,
             inputDecoded: null,
-            detailRaw: null,
+            raw: null,
+            eigenphy: {
+                bundleId: id,
+                tag: "searcher",
+            }
         };
     }
 
