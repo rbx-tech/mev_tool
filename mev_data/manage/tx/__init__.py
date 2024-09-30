@@ -3,7 +3,7 @@ import queue
 import logging
 from os import getenv
 from models import Txs
-from worker.tx import TxWorker
+from .worker import TxWorker
 
 
 class TxManager:

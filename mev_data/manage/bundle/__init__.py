@@ -4,7 +4,7 @@ import queue
 from os import getenv
 from config import LIBMEV_MIN_TIMESTAMP
 from models import Bundles, Txs, BundleTasks
-from worker.bundle import BundleWorker
+from .worker import BundleWorker
 
 
 class BundleManager:

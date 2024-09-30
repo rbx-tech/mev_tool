@@ -10,7 +10,8 @@ class TxLogs:
         query = """
             CREATE TABLE IF	NOT EXISTS tx_logs (
                 tx_hash VARCHAR (66) NOT NULL,
-                first_topic VARCHAR (66) NOT NULL,
+                address VARCHAR (42) NOT NULL,
+                signature VARCHAR (10) NOT NULL,
                 topics VARCHAR (66)[] NOT NULL,
                 data TEXT NOT NULL,
                 log_index SMALLINT NOT NULL,
@@ -25,7 +26,7 @@ class TxLogs:
     def batch_insert(self, tx_logs):
         query = """
             INSERT INTO tx_logs (
-                tx_hash, first_topic, topics, data, log_index, removed 
+                tx_hash, address, signature, topics, data, log_index, removed 
             ) VALUES %s
             ON CONFLICT (tx_hash, log_index) DO NOTHING
         """
