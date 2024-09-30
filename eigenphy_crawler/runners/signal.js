@@ -37,6 +37,7 @@ export async function runCrawlSignals() {
         await mongoDb.transactionsCol.updateOne({ _id: tx._id }, {
           $set: {
             signalScanned: true,
+            error: true,
           },
         });
         continue;
