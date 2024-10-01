@@ -88,7 +88,7 @@ export async function runCrawlSignals() {
       const resultBundles = await mongoDb.bundlesCol.bulkWrite(updateBundles);
       console.log('Updated bundles', resultBundles.modifiedCount);
     }
-    if (updateTxs) {
+    if (updateTxs.length) {
       const resultTxs = await mongoDb.transactionsCol.bulkWrite(updateTxs);
       console.log('Updated txs', resultTxs.modifiedCount);
     }

@@ -17,11 +17,6 @@ const bundle = {
   builderName: "beaverbuild", // in lower case
   builderAddress: "0x6265617665726275696c642e6f7267",
   types: ["arbitrage"], // "sandwich" ... in lower case,
-  tokens: [
-    "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-    "0xed89fc0f41d8be2c98b13b7e3cd3e876d73f1d30",
-  ],
-  pools: ["0x41f11282fb5330700a6c8a67dd2c7ebb9b8adfa5"],
   useFlashloan: false, // optional
   txs: [
       "0x410c53e1ab774756802145a163a3dde8f6cc35850b34d8c333fc78d8ea2644ea",
