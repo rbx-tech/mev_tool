@@ -31,12 +31,12 @@ async function reportRouters() {
 
   const startRow = 2;
   const tables = results.splice(0, 900);
-  tables.push({ _id: 'other', count: results.reduce((acc, it) => acc + it.count, 0) });
+  tables.push({ _id: '(Other)', count: results.reduce((acc, it) => acc + it.count, 0) });
   await sheet.loadCells(`C${startRow}:D${results.length + startRow}`);
 
   for (let i = 0; i < tables.length; i++) {
     const v = tables[i];
-    sheet.getCell(i + startRow, 2).value = v._id || 'unknown';
+    sheet.getCell(i + startRow, 2).value = v._id || '(Unknown)';
     sheet.getCell(i + startRow, 3).value = v.count;
   }
   await sheet.saveUpdatedCells();

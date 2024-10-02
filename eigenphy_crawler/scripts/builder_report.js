@@ -22,14 +22,14 @@ async function reportPopularBuilder() {
   ]).toArray();
   const top50 = results.splice(0, 50);
   const otherCnt = results.reduce((acc, it) => acc + it.count, 0);
-  top50.push({_id: 'Other', count: otherCnt});
+  top50.push({_id: '(Other)', count: otherCnt});
 
   const startRow = 2;
   await sheet.loadCells(`C${startRow}:D${top50.length + startRow}`);
 
   for (let i = 0; i < top50.length; i++) {
     const v = top50[i];
-    sheet.getCell(i + startRow, 2).value = v._id || 'unknown';
+    sheet.getCell(i + startRow, 2).value = v._id || '(Unknown)';
     sheet.getCell(i + startRow, 3).value = v.count;
   }
   await sheet.saveUpdatedCells();

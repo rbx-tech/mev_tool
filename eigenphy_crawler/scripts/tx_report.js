@@ -1,11 +1,7 @@
 import { mongoDb } from "../mongo.js";
 import { initDoc } from "./utils.js";
 
-async function reportRouters() {
-  const doc = await initDoc();
-  const sheet = doc.sheetsByTitle['Transactions'];
-  console.log("Thống kê lượng transactions")
-
+async function reportTxByMonths(sheet) {
   const results = await mongoDb.bundlesCol.aggregate([
     {
       $group: {
@@ -23,23 +19,67 @@ async function reportRouters() {
         },
       }
     },
-    { $sort: {_id: -1} }
+    { $sort: {_id: 1} }
   ]).toArray();
-  const startRow = 2;
+  const startRow = 3;
   await sheet.loadCells(`B${startRow}:D${results.length + startRow}`);
 
   for (let i = 0; i < results.length; i++) {
     const v = results[i];
-    sheet.getCell(i + startRow, 1).value = v._id || 'null';
-    sheet.getCell(i + startRow, 2).value = v.searcher;
-    sheet.getCell(i + startRow, 3).value = v.victim;
+    sheet.getCellByA1(`B${i + startRow}`).value = v._id;
+    sheet.getCellByA1(`C${i + startRow}`).value = v.searcher;
+    sheet.getCellByA1(`D${i + startRow}`).value = v.victim;
   }
   await sheet.saveUpdatedCells();
+  console.log("Thống kê lượng transactions")
+  console.table(results);
+}
+
+async function reportSwapFunc(sheet) {
+  const results = await mongoDb.transactionsCol.aggregate([
+    {
+      $match: {
+        $or: [
+          {
+            "eigenphy.tag": "victim",
+          },
+          {
+            "libMev.tag": "victim",
+          }
+        ]
+      }
+    },
+    {
+      $group: {
+        _id: "$inputDecoded.func",
+        count: { $sum: 1 },
+      }
+    },
+    {
+      $sort: {count: -1}
+    }
+  ]).toArray();
+  const startRow = 3;
+  await sheet.loadCells(`P${startRow}:Q${results.length + startRow}`);
+
+  for (let i = 0; i < results.length; i++) {
+    const v = results[i];
+    sheet.getCellByA1(`P${i + startRow}`).value = v._id || '(Unknown)';
+    sheet.getCellByA1(`Q${i + startRow}`).value = v.count;
+  }
+  console.log("Thống kê số lượng functions")
   console.table(results);
 }
 
 (async function () {
   await mongoDb.connect();
-  await reportRouters();
+  const doc = await initDoc();
+  const sheet = doc.sheetsByTitle['Transactions'];
+
+  await Promise.all([
+    reportSwapFunc(sheet),
+    reportTxByMonths(sheet),
+  ]);
+  await sheet.saveUpdatedCells();
   process.exit();
 })()
