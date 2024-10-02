@@ -1,16 +1,23 @@
 import { mongoDb } from "../mongo.js";
 import { initDoc } from "./utils.js";
 
+const blackMevs = ['0x6980a47bee930a4584b09ee79ebe46484fbdbdd0']
 
 async function reportMev(sheet) {
   const startRow = 3;
   const mevResults = await mongoDb.bundlesCol.aggregate([
     {
+      $match: {
+        types: "arbitrage",
+        revenueUsd: {$gt: 0},
+      }
+    },
+    {
       $group: {
         _id: "$mevAddress",
         revenue: { $sum: "$revenueUsd" },
         profit: { $sum: "$profitUsd" },
-        cost: { $sum: "$costUsd" },
+        // cost: { $sum: "$costUsd" },
       },
     },
     {
@@ -25,7 +32,7 @@ async function reportMev(sheet) {
     _id: 'Other',
     revenue: (acc.revenue || 0) + Number(it.revenue),
     profit: (acc.profit || 0) + Number(it.profit),
-    cost: (acc.cost || 0) + Number(it.cost),
+    // cost: (acc.cost || 0) + Number(it.cost),
   }), {}));
 
   await sheet.loadCells(`B${startRow}:E${top30.length + startRow}`);
@@ -33,9 +40,10 @@ async function reportMev(sheet) {
     const v = top30[i];
     sheet.getCellByA1(`B${i + startRow}`).value = v._id;
     sheet.getCellByA1(`C${i + startRow}`).value = Number(v.revenue);
-    sheet.getCellByA1(`D${i + startRow}`).value = Number(v.cost);
+    // sheet.getCellByA1(`D${i + startRow}`).value = Number(v.cost);
     sheet.getCellByA1(`E${i + startRow}`).value = Number(v.profit);
   }
+  console.table(top30);
 }
 
 async function reportProfitByMonths(sheet) {
@@ -43,9 +51,8 @@ async function reportProfitByMonths(sheet) {
   const monthResults = await mongoDb.bundlesCol.aggregate([
     {
       $match: {
-        revenueUsd: { $ne: null },
-        profitUsd: { $ne: null },
-        costUsd: { $ne: null },
+        revenueUsd: {$gt: 0},
+        types: "arbitrage",
       }
     },
     {

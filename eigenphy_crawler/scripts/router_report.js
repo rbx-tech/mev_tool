@@ -10,37 +10,29 @@ async function reportRouters() {
   const results = await mongoDb.transactionsCol.aggregate([
     {
       $match: {
-        $or: [
-          {
-            "eigenphy.tag": "victim",
-          },
-          {
-            "libMev.tag": "victim",
-          }
-        ]
+        tags: "victim",
+        types: "arbitrage",
       }
     },
     {
       $group: {
-        _id: "$raw.to",
+        _id: "$contractName",
         count: { $sum: 1 },
       }
     },
-    { $sort: { count: -1 } }
+    { $sort: { count: -1 } },
+    { $limit: 900 }
   ]).toArray();
 
-  const startRow = 2;
-  const tables = results.splice(0, 900);
-  tables.push({ _id: '(Other)', count: results.reduce((acc, it) => acc + it.count, 0) });
-  await sheet.loadCells(`C${startRow}:D${results.length + startRow}`);
-
-  for (let i = 0; i < tables.length; i++) {
-    const v = tables[i];
-    sheet.getCell(i + startRow, 2).value = v._id || '(Unknown)';
-    sheet.getCell(i + startRow, 3).value = v.count;
+  const startRow = 3;
+  await sheet.loadCells(`B${startRow}:C${results.length + startRow}`);
+  for (let i = 0; i < results.length; i++) {
+    const v = results[i];
+    sheet.getCellByA1(`B${i + startRow}`).value = v._id || '(Unknown)';
+    sheet.getCellByA1(`C${i + startRow}`).value = v.count;
   }
   await sheet.saveUpdatedCells();
-  console.table(tables);
+  console.table(results);
 }
 
 (async function () {

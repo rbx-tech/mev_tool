@@ -9,6 +9,11 @@ async function reportPopularBuilder() {
   console.log("Thống kê builder phổ biến")
   const results = await mongoDb.bundlesCol.aggregate([
     {
+      $match: {
+        types: "arbitrage",
+      }
+    },
+    {
       $group: {
         _id: "$builderAddress",
         count: { $sum: 1 },

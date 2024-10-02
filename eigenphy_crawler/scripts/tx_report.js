@@ -4,6 +4,11 @@ import { initDoc } from "./utils.js";
 async function reportTxByMonths(sheet) {
   const results = await mongoDb.bundlesCol.aggregate([
     {
+      $match: {
+        types: "arbitrage"
+      }
+    },
+    {
       $group: {
         _id: {
           "$dateToString": {
@@ -39,14 +44,8 @@ async function reportSwapFunc(sheet) {
   const results = await mongoDb.transactionsCol.aggregate([
     {
       $match: {
-        $or: [
-          {
-            "eigenphy.tag": "victim",
-          },
-          {
-            "libMev.tag": "victim",
-          }
-        ]
+        tags: "victim",
+        types: "arbitrage"
       }
     },
     {

@@ -6,10 +6,7 @@ async function reportTokens(sheet) {
   const results = await mongoDb.transactionsCol.aggregate([
     {
       $match: {
-        $or: [
-          { "eigenphy.tag": "victim" },
-          { "libMev.tag": "victim" },
-        ]
+        tags: "victim"
       }
     },
     { $unwind: "$tokens" },
@@ -55,10 +52,7 @@ async function reportPools(sheet) {
   const results = await mongoDb.transactionsCol.aggregate([
     {
       $match: {
-        $or: [
-          { "eigenphy.tag": "victim" },
-          { "libMev.tag": "victim" },
-        ]
+        tags: "victim"
       }
     },
     { $unwind: "$pools" },
