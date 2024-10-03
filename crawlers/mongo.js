@@ -1,14 +1,15 @@
 import { MongoClient } from "mongodb";
-const uri = () => process.env['MONGO_URI'] || "mongodb://localhost:27018/eigenphy?authSource=admin";
 
 class MongoDb {
   constructor() {
     this.db = null;
   }
+
   async connect() {
-    this.mongoClient = new MongoClient(uri());
+    const mongoUri = process.env['MONGO_URI'] || "mongodb://localhost:27018/mev?authSource=admin";
+    this.mongoClient = new MongoClient(mongoUri);
     const client = await this.mongoClient.connect();
-    this.db = client.db('eigenphy');
+    this.db = client.db('mev');
   }
 
   get bundlesCol() {
@@ -31,6 +32,22 @@ class MongoDb {
     return this.db.collection('transactions');
   }
 
+  get runners() {
+    return this.db.collection('runners');
+  }
+
+  async getInfo(key, defaultVal = null)  {
+    const doc = await this.infoCol.findOne({_id: key});
+    if (!doc) {
+      await this.infoCol.insertOne({_id: key, value: defaultVal});
+      return defaultVal;
+    }
+    return doc.value || defaultVal;
+  }
+
+  async setInfo(key, value)  {
+    await this.infoCol.updateOne({_id: key}, {$set: {value: value}});
+  }
 }
 
 export const mongoDb = new MongoDb();

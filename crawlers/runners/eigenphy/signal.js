@@ -1,6 +1,6 @@
-import { mongoDb } from "../mongo.js";
-import { sleep } from "../utils/index.js";
-import { Proxy4 } from "../utils/proxyv4.js";
+import { mongoDb } from "../../mongo.js";
+import { sleep } from "../../utils/index.js";
+import { Proxy4 } from "../../utils/proxy4.js";
 
 export async function runCrawlSignals() {
   const defaultHeaders = {

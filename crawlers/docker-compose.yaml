@@ -1,6 +1,6 @@
 services:
-  mongo:
-    container_name: eigenmongo
+  mongodb:
+    container_name: mongodb
     image: mongo
     command: mongod --port 27018
     volumes:
@@ -12,11 +12,10 @@ services:
     ports:
       - "27018:27018"
 
-  nodejs:
-    container_name: eigencrawler
+  crawlers:
+    container_name: mev_crawlers
     build: .
     depends_on:
-      - mongo
+      - mongodb
     environment:
-      - MONGO_URI=mongodb://eigenmongo:27018/eigenphy?authSource=admin
-
+      - MONGO_URI=mongodb://mongodb:27018/mev?authSource=admin

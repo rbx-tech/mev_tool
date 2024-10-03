@@ -1,5 +1,6 @@
 import axios from 'axios'
-import { HttpsProxyAgent } from 'https-proxy-agent';
+import { SocksProxyAgent } from 'socks-proxy-agent';
+import axiosRetry from 'axios-retry';
 
 const ipPrefix = "2604:4300:f38::"
 const passwd = "xFkzihNm"
@@ -42,10 +43,12 @@ export class Proxy6 {
 
   toClient() {
       let proxyUrl = `${schema}://${this.user}:${passwd}@${host}`;
-      console.log(proxyUrl)
-      const agent = new HttpsProxyAgent(proxyUrl);
-      return axios.create({
+      const agent = new SocksProxyAgent(proxyUrl);
+      const axiosIns = axios.create({
           httpsAgent: agent,
       });
+      axiosIns.defaults.timeout = 2 * 60_000;
+      axiosRetry(axiosIns, { retries: 3, retryDelay: axiosRetry.exponentialDelay });
+      return axiosIns;
   }
 }
