@@ -1,4 +1,4 @@
-import {runCrawlEigenphyBundles } from './runners/eigenphy/index.js'
+import {runCrawlEigenphyBundles } from './runners/eigenphy/bundle.js'
 import {crawlLibMevBundles } from './runners/libmev/bundle.js'
 import {mongoDb} from './mongo.js'
 import { sleep } from './utils/index.js';
