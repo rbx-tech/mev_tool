@@ -265,7 +265,7 @@ async function parseRawData(rawData, docData) {
 
     const poolIds = (docData?.poolsInfo || []).map((e) => e.address);
     const tokenIds = (docData?.tokens || []).map((e) => e.address);
-    const protocols = removeDuplicate((docData?.poolsInfo || []).filter((e) => e).map((e) => e.protocol?.name || e.address));
+    const protocols = removeDuplicate((docData?.poolsInfo || []).filter((e) => e).map((e) => e.protocol?.displayName || e.address));
 
     if (rawData.tokenFlowCharts?.length) {
         searcherTxs = [];

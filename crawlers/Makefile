@@ -4,3 +4,7 @@ zip:
 
 upload:
 	scp ./output/source.zip noname@10.7.0.50:~/eigenphy_crawler/source.zip
+
+# build_image:
+# 	docker build -t 
+# 	docker save -o resources/nodejs mev_crawlers

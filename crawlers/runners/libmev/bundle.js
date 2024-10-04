@@ -61,7 +61,7 @@ export async function crawlLibMevBundles() {
       runningCnt++;
       processReq(runner).then(async () => {
         runningCnt--;
-      });
+      }).catch((e) => console.log(e));
     }
   }
 
@@ -163,7 +163,7 @@ async function processReq(runner) {
     ]);
   } catch (e) {
     const msg = e?.response?.data;
-    console.log(runnerId, `Request from offset ${offset} error`, msg);
+    console.log(runnerId, `Request from offset ${bundle.offset} error`, msg);
     await mongoDb.runners.updateOne({ _id: runnerId }, { $set: { status: 'ERROR', msg: msg }, $inc: {errorsCnt: 1} });
   }
 }
