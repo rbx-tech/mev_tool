@@ -7,9 +7,9 @@ class MongoDb {
 
   async connect() {
     const mongoUri = process.env['MONGO_URI'] || "mongodb://localhost:27018/mev?authSource=admin";
-    this.mongoClient = new MongoClient(mongoUri);
-    const client = await this.mongoClient.connect();
-    this.db = client.db('mev');
+    const mongoClient = new MongoClient(mongoUri);
+    this.client = await mongoClient.connect();
+    this.db = this.client.db();
   }
 
   get bundlesCol() {
@@ -34,6 +34,10 @@ class MongoDb {
 
   get runners() {
     return this.db.collection('runners');
+  }
+
+  switchDb(dbName = null) {
+    this.db = this.client.db(dbName);
   }
 
   async getInfo(key, defaultVal = null)  {

@@ -17,10 +17,10 @@ async function reportTxByMonths(sheet) {
           }
         },
         victim: {
-          '$sum': {$cond: [{$eq: ['$signalTxs', null]}, 0, {$size: "$signalTxs"}]}
+          '$sum': {$cond: [{$isArray: '$signalTxs'}, {$size: "$signalTxs"}, 0]}
         },
         searcher: {
-          '$sum': {$cond: [{$eq: ['$searcherTxs', null]}, 0, {$size: "$searcherTxs"}]}
+          '$sum': {$cond: [{$isArray: '$signalTxs'}, {$size: "$searcherTxs"}, 0]}
         },
       }
     },

@@ -357,6 +357,7 @@ async function parseRawData(rawData, docData) {
         txs: txIds,
         searcherTxs: searcherTxs,
         source: "eigenphy",
+        mevAddress: rawData.txMeta.transactionToAddress,
         rawData: {
             ...rawData,
             tokens: docData?.tokens || [],

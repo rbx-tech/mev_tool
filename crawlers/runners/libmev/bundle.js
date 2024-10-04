@@ -2,31 +2,66 @@ import { mongoDb } from "../../mongo.js";
 import { Proxy6 } from "../../utils/proxy6.js";
 import {sleep} from '../../utils/index.js';
 
-const limit = 20;
-
 export async function crawlLibMevBundles() {
   let runningCnt = 0;
-  const offset = await mongoDb.getInfo('libmev_current_offset', 0);
-  let nextOffset = offset;
   console.log(`Start crawling libmev bundles...`);
 
+  const limit = await mongoDb.getInfo('libmev_crawl_limit', 20);
+  await mongoDb.runners.updateMany({status: 'RUNNING'}, {$set: {status: 'PENDING'}})
+
   while (true) {
-    const maxRunners = await mongoDb.getInfo('libmev_runners', 5);
-    for (let i = 0; i < (maxRunners - runningCnt); i++) {
-      runningCnt++;
-      processReq(nextOffset).then(async (offset) => {
-        const currentOffset = await mongoDb.getInfo('libmev_current_offset', 0);
-        if (offset > currentOffset) {
-          await mongoDb.setInfo('libmev_current_offset', offset)
-        }
-        runningCnt--;
-      });
-      nextOffset += limit;
-    }
-    await sleep(1000);
+    await sleep(3000);
     const isEnable = await mongoDb.getInfo('libmev_enable', false);
     if (!isEnable) {
       break;
+    }
+
+    const maxRunners = await mongoDb.getInfo('libmev_runners', 5);
+    const avail = (maxRunners - runningCnt);
+    if (avail <= 0) {
+      continue;
+    }
+    const runners = await mongoDb.runners.find({status: {$nin: ['OK', 'RUNNING']}}).sort({offset: 1}).limit(avail).toArray();
+    if (!runners.length) {
+      const offsetRes = await mongoDb.runners.find({}).sort({offset: -1}).limit(1).toArray();
+      let currentOffset = 0;
+      if (offsetRes.length) {
+        currentOffset = offsetRes[0].offset + limit;
+      }
+
+      let nextOffset = currentOffset;
+      const updates = [];
+      for (let index = 0; index < avail; index++) {
+        const runnerId = `libmev_offset_${nextOffset}`;
+        const url = `https://api.libmev.com/v1/bundles?timestampRange=1663224162,1727927182&filterByTags=naked_arb,backrun,sandwich,liquidation&orderByDesc=block_number`;
+        updates.push({
+          updateOne: {
+            filter: { _id: runnerId },
+            update: {
+              $set: {
+                _id: runnerId,
+                runner: `libmev`,
+                offset: nextOffset,
+                limit: limit,
+                url: `${url}&offset=${nextOffset}&limit=${limit}`,
+                status: 'PENDING',
+                startedAt: Date.now(),
+              },
+            },
+            upsert: true,
+          },
+        });
+        nextOffset += limit;
+      }
+      await mongoDb.runners.bulkWrite(updates);
+      continue;
+    }
+
+    for(const runner of runners) {
+      runningCnt++;
+      processReq(runner).then(async () => {
+        runningCnt--;
+      });
     }
   }
 
@@ -35,34 +70,19 @@ export async function crawlLibMevBundles() {
   console.log('LibMev', `Runner stopped, next_run = ${next_run}`);
 }
 
-
-async function processReq(offset) {
-  const libMevUrl = `https://api.libmev.com/v1/bundles?timestampRange=1663224162,1727927182&filterByTags=naked_arb,backrun,sandwich,liquidation&orderByDesc=block_number`;
+async function processReq(runner) {
   const proxy = Proxy6.genNew();
-
-  const url = `${libMevUrl}&limit=${limit}&offset=${offset}`;
   const bundleUpdates = [];
   const txUpdates = [];
-
-  const runnerId = `libmev_offset_${offset}`;
-  console.log(runnerId, 'Request to', url);
-
+  const runnerId = runner._id;
   await mongoDb.runners.updateOne(
     { _id: runnerId },
-    {
-      $set: {
-        runner: `libmev`,
-        offset: offset,
-        limit: limit,
-        url: url,
-        startedAt: Date.now(),
-      }
-    },
-    { upsert: true }
+    { $set: {status: 'RUNNING'} },
   );
+  console.log(runnerId, 'Request to', runner.url);
 
   try {
-    const result = await proxy.toClient().get(url);
+    const result = await proxy.toClient().get(runner.url);
     const bundleRaws = result.data.data;
     const totalBundles = result.data.count || 0;
     console.log(runnerId, `Got ${bundleRaws.length} bundles`);
@@ -146,5 +166,4 @@ async function processReq(offset) {
     console.log(runnerId, `Request from offset ${offset} error`, msg);
     await mongoDb.runners.updateOne({ _id: runnerId }, { $set: { status: 'ERROR', msg: msg }, $inc: {errorsCnt: 1} });
   }
-  return offset;
 }
