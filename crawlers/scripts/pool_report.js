@@ -6,7 +6,9 @@ async function reportTokens(sheet) {
   const results = await mongoDb.transactionsCol.aggregate([
     {
       $match: {
-        tags: "victim"
+        tags: "victim",
+        eigenphy: {$exists: 1},
+        types: 'arbitrage',
       }
     },
     { $unwind: "$tokens" },
@@ -52,7 +54,9 @@ async function reportPools(sheet) {
   const results = await mongoDb.transactionsCol.aggregate([
     {
       $match: {
-        tags: "victim"
+        eigenphy: {$exists: 1},
+        tags: "victim",
+        types: 'arbitrage',
       }
     },
     { $unwind: "$pools" },
@@ -98,10 +102,9 @@ async function reportProtocols(sheet) {
   const results = await mongoDb.transactionsCol.aggregate([
     {
       $match: {
-        $or: [
-          { "eigenphy.tag": "victim" },
-          { "libMev.tag": "victim" },
-        ]
+        eigenphy: {$exists: 1},
+        tags: 'victim',
+        types: 'arbitrage',
       }
     },
     { $unwind: "$protocols" },

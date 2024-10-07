@@ -163,7 +163,7 @@ async function processReq(runner) {
     ]);
   } catch (e) {
     const msg = e?.response?.data;
-    console.log(runnerId, `Request from offset ${bundle.offset} error`, msg);
+    console.log(runnerId, `Request from offset ${runner.offset} error`, msg);
     await mongoDb.runners.updateOne({ _id: runnerId }, { $set: { status: 'ERROR', msg: msg }, $inc: {errorsCnt: 1} });
   }
 }

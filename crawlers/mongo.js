@@ -1,6 +1,6 @@
 import { MongoClient } from "mongodb";
 
-class MongoDb {
+export class MongoDb {
   constructor() {
     this.db = null;
   }

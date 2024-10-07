@@ -21,7 +21,6 @@ async function reportRouters() {
       }
     },
     { $sort: { count: -1 } },
-    { $limit: 900 }
   ]).toArray();
 
   const startRow = 3;
