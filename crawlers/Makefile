@@ -1,7 +1,7 @@
 zip:
 	mkdir -p output
 	rm -rf output/source.zip
-	zip -r output/source.zip runners utils resources index.js mongo.js package.json docker-compose.yaml Dockerfile
+	zip -r output/source.zip node/ python/ resources/ docker-compose.yaml -x node/node_modules/ node/package-lock.json python/venv
 
 upload:
 	scp ./output/source.zip noname@10.7.0.50:/mnt/nvme2/mev_crawlers/source.zip

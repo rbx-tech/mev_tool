@@ -1,6 +1,6 @@
 import { GoogleSpreadsheet } from 'google-spreadsheet';
 import {JWT} from 'google-auth-library';
-import cred from '../resources/google_cred.json' with {type: "json"};
+import cred from '../../../resources/google_cred.json' with {type: "json"};
 
 
 export async function initDoc() {

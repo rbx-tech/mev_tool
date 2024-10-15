@@ -8,6 +8,7 @@ async function run() {
     console.log('Connected to database');
     let isEigenphyRunning = false;
     let isLibmevRunning = false;
+
     while(true) {
         if (!isEigenphyRunning) {
             const [isEnable, nextRun] = await Promise.all([

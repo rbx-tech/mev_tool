@@ -14,8 +14,17 @@ services:
 
   crawlers:
     container_name: mev_crawlers
-    build: .
+    build: ./node
     depends_on:
       - mongodb
     environment:
+      - MONGO_URI=mongodb://mongodb:27018/mev?authSource=admin
+
+  py_crawlers:
+    container_name: py_crawlers
+    build: ./python
+    depends_on:
+      - mongodb
+    environment:
+      - ETH_HTTP_ENDPOINT=http://10.7.0.58:8545
       - MONGO_URI=mongodb://mongodb:27018/mev?authSource=admin
