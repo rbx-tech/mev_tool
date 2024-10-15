@@ -2,7 +2,7 @@ import unittest
 from src.runners.cycle_extractor import CycleExtractor
 
 
-class RpcTestCase(unittest.TestCase):
+class CycleExtractorTest(unittest.TestCase):
     runner = CycleExtractor()
 
     def setUp(self):
