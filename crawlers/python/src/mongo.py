@@ -13,6 +13,9 @@ class MongoDb:
         self.db = self.client.get_database()
         return self
 
+    def close(self):
+        self.client.close()
+
     @property
     def bundles(self):
         return self.db['bundles']

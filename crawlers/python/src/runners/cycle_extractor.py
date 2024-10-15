@@ -1,3 +1,4 @@
+from itertools import cycle
 import os
 from time import sleep
 from pymongo import UpdateOne
@@ -22,9 +23,8 @@ class CycleExtractor:
     erc20_contract: web3.contract.Contract
     w3: Web3
 
-    def run(self):
+    def init(self):
         self.db = MongoDb().connect()
-
         # abi_v2 = read_from_file('abi/uniswap_v2_pair.json')
         # abi_v3 = read_from_file('abi/uniswap_v3_pair.json')
         abi_erc20 = read_from_file('abi/erc20.json')
@@ -32,6 +32,8 @@ class CycleExtractor:
         node_url = os.getenv('ETH_HTTP_ENDPOINT') or 'http://10.7.0.58:8545'
         self.w3 = Web3(Web3.HTTPProvider(node_url))
         self.erc20_contract: web3.contract.Contract = self.w3.eth.contract('', abi=abi_erc20)
+
+    def run(self):
         try:
             self._process()
         except KeyboardInterrupt:
@@ -40,43 +42,20 @@ class CycleExtractor:
     def _process(self):
         while (True):
             limit = self.db.get_info('cycles_extract_limit', 500)
-            txs = list(self.db.transactions.find({'transfers': {'$exists': 0}}, {'_id': 1}).limit(limit))
+            txs = list(self.db.transactions.find({'transfers': {'$exists': 0}, 'tags': 'searcher', 'types': 'arbitrage'}, {'_id': 1}).limit(limit))
             updates = []
             if (len(txs) > 0):
                 print('CycleExtractor:', f'start processing {len(txs)} txs....')
                 for tx in txs:
                     tx_hash = tx['_id']
-                    try:
-                        tx = self.w3.eth.get_transaction_receipt(tx_hash)
-                    except Exception as e:
-                        print('CycleExtractor:', f'{e}')
+                    result = self.detect_cycle(tx_hash)
+                    if result is None:
                         updates.append(UpdateOne(
                             {'_id': tx_hash},
                             {'$set': {'transfers': None, 'cycles': None}}))
                         continue
+                    cycles, transfers = result
 
-                    G = nx.DiGraph()
-                    transfers = []
-                    for log in tx.logs:
-                        if len(log.topics) == 0:
-                            continue
-
-                        event_sign = log.topics[0]
-                        if event_sign == TOPIC_ERC20_TRANSFER:
-                            token = '0x' + str(log.address).lower()
-                            src = '0x' + str(log.topics[1].hex())[24:].lower()
-                            dst = '0x' + str(log.topics[2].hex())[24:].lower()
-                            try:
-                                event = self.erc20_contract.events['Transfer']
-                                args = event().process_log(log).args
-                                amount = str(args.value)
-                            except web3.exceptions.LogTopicError as e:
-                                print('CycleExtractor ERROR:', f'{e}, tx={tx_hash} log={log.address}')
-                                amount = None
-                            transfers.append({'from': src, 'to': dst, 'token': token, 'amount': amount})
-                            G.add_edge(src, dst)
-
-                    cycles = list(nx.simple_cycles(G))
                     updates.append(UpdateOne(
                         {'_id': tx_hash},
                         {
@@ -91,3 +70,34 @@ class CycleExtractor:
                 print('CycleExtractor:', 'processed result', result)
 
             sleep(1)
+
+    def detect_cycle(self, tx_hash):
+        G = nx.DiGraph()
+        transfers = []
+        try:
+            tx = self.w3.eth.get_transaction_receipt(tx_hash)
+        except Exception as e:
+            print('CycleExtractor:', f'{e}')
+            return
+
+        for log in tx.logs:
+            if len(log.topics) == 0:
+                continue
+
+            event_sign = log.topics[0]
+            if event_sign == TOPIC_ERC20_TRANSFER:
+                token = '0x' + str(log.address).lower()
+                src = '0x' + str(log.topics[1].hex())[24:].lower()
+                dst = '0x' + str(log.topics[2].hex())[24:].lower()
+                try:
+                    event = self.erc20_contract.events['Transfer']
+                    args = event().process_log(log).args
+                    amount = str(args.value)
+                except web3.exceptions.LogTopicError as e:
+                    print('CycleExtractor ERROR:', f'{e}, tx={tx_hash} log={log.address}')
+                    amount = None
+                transfers.append({'from': src, 'to': dst, 'token': token, 'amount': amount})
+                G.add_edge(src, dst)
+
+        cycles = list(nx.simple_cycles(G))
+        return cycles, transfers
