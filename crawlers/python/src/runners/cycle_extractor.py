@@ -38,8 +38,8 @@ class CycleExtractor:
             pass
 
     def _process(self):
-        limit = self.db.get_info('cycles_extract_limit', 500)
         while (True):
+            limit = self.db.get_info('cycles_extract_limit', 500)
             txs = list(self.db.transactions.find({'transfers': {'$exists': 0}}, {'_id': 1}).limit(limit))
             updates = []
             if (len(txs) > 0):
