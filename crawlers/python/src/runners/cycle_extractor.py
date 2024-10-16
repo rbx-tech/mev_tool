@@ -1,4 +1,4 @@
-from itertools import cycle
+from collections import defaultdict
 import os
 from time import sleep
 from pymongo import UpdateOne
@@ -7,7 +7,7 @@ import web3
 import web3.contract
 from src.mongo import MongoDb
 import networkx as nx
-from src.utils import read_from_file
+from src.utils import chunk_list, read_from_file
 
 # Swap (index_topic_1 address sender, uint256 amount0In, uint256 amount1In, uint256 amount0Out, uint256 amount1Out, index_topic_2 address to)
 TOPIC_UNISWAP_V2 = bytes.fromhex("d78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822")
@@ -22,6 +22,7 @@ class CycleExtractor:
     db: MongoDb
     erc20_contract: web3.contract.Contract
     w3: Web3
+    w3_provider: Web3.HTTPProvider
 
     def init(self):
         self.db = MongoDb().connect()
@@ -30,7 +31,8 @@ class CycleExtractor:
         abi_erc20 = read_from_file('abi/erc20.json')
 
         node_url = os.getenv('ETH_HTTP_ENDPOINT') or 'http://10.7.0.58:8545'
-        self.w3 = Web3(Web3.HTTPProvider(node_url))
+        self.w3_provider = Web3.HTTPProvider(node_url)
+        self.w3 = Web3(self.w3_provider)
         self.erc20_contract: web3.contract.Contract = self.w3.eth.contract('', abi=abi_erc20)
 
     def run(self):
@@ -48,7 +50,7 @@ class CycleExtractor:
                 print('CycleExtractor:', f'start processing {len(txs)} txs....')
                 for tx in txs:
                     tx_hash = tx['_id']
-                    result = self.detect_cycle(tx_hash)
+                    result = self.detect_cycles(tx_hash)
                     if result is None:
                         updates.append(UpdateOne(
                             {'_id': tx_hash},
@@ -71,33 +73,53 @@ class CycleExtractor:
 
             sleep(1)
 
-    def detect_cycle(self, tx_hash):
+    def detect_cycles(self, tx_hash):
         G = nx.DiGraph()
-        transfers = []
         try:
-            tx = self.w3.eth.get_transaction_receipt(tx_hash)
+            tx_trace = self.w3_provider.make_request('trace_transaction', [tx_hash])
+            tx = self.w3.eth.get_transaction(tx_hash)
         except Exception as e:
             print('CycleExtractor:', f'{e}')
             return
 
-        for log in tx.logs:
-            if len(log.topics) == 0:
+        to_addr = str(tx.to).lower()
+        transfers = []
+        mev_transfers = defaultdict(lambda: [])
+        i = 0
+        tokens = []
+        for trace in tx_trace['result']:
+            action = trace['action']
+            try:
+                func, args = self.erc20_contract.decode_function_input(action['input'])
+                if 'transfer' not in func.fn_name:
+                    continue
+                if args.get('sender'):
+                    src = str(args['sender']).lower()
+                else:
+                    src = str(action['from']).lower()
+                dst = str(args['recipient']).lower()
+                token = str(action['to']).lower()
+                tokens.append(token)
+                amount = str(args['amount'])
+                info = {'from': src, 'to': dst, 'token': token, 'amount': amount}
+                if src not in tokens:
+                    if to_addr == src:
+                        mev_transfers[token].append((i, -1, amount))
+                    if to_addr == dst:
+                        mev_transfers[token].append((i, +1, amount))
+                transfers.append(info)
+                i += 1
+            except Exception as e:
                 continue
 
-            event_sign = log.topics[0]
-            if event_sign == TOPIC_ERC20_TRANSFER:
-                token = '0x' + str(log.address).lower()
-                src = '0x' + str(log.topics[1].hex())[24:].lower()
-                dst = '0x' + str(log.topics[2].hex())[24:].lower()
-                try:
-                    event = self.erc20_contract.events['Transfer']
-                    args = event().process_log(log).args
-                    amount = str(args.value)
-                except web3.exceptions.LogTopicError as e:
-                    print('CycleExtractor ERROR:', f'{e}, tx={tx_hash} log={log.address}')
-                    amount = None
-                transfers.append({'from': src, 'to': dst, 'token': token, 'amount': amount})
-                G.add_edge(src, dst)
-
-        cycles = list(nx.simple_cycles(G))
+        cycles = []
+        for k in mev_transfers.keys():
+            chunks = chunk_list(mev_transfers[k], 2)
+            for c in chunks:
+                if len(c) != 2:
+                    continue
+                i1, m1, amount1 = c[0]
+                i2, m2, amount2 = c[1]
+                if m1*int(amount1) + m2 * int(amount2) > 0:
+                    cycles.append(transfers[i1:i2 + 1])
         return cycles, transfers
