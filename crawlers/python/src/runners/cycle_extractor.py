@@ -16,6 +16,7 @@ TOPIC_UNISWAP_V3 = bytes.fromhex("c42079f94a6350d7e6235f29174924f928cc2ac818eb64
 
 # Transfer (index_topic_1 address src, index_topic_2 address dst, uint256 wad)
 TOPIC_ERC20_TRANSFER = bytes.fromhex("ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
+WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
 
 
 class CycleExtractor:
@@ -70,6 +71,42 @@ class CycleExtractor:
                 print('CycleExtractor:', 'processed result', result)
 
             sleep(1)
+            
+    def detect_cycle_2(self, transfers:list):
+        cycle = [[]]
+        search_token = WETH
+        mev_addr = "0x00000000009e50a7ddb7a7b0e2ee6604fd120e49"
+        sender_addr = mev_addr # Change to to_addr of tx (MEV Bot)
+        while len(transfers) > 0:
+            record = self.search_token(transfers, search_token, sender_addr)
+            print("Cycle ", len(cycle), ' append token: ', record['token'], ' from:', record['from'])
+            cycle[-1].append(record['token'])
+            transfers  = self.safe_remove_item(transfers, record)
+            if len(cycle[-1]) > 1 and cycle[-1][0] == cycle[-1][-1]:
+                search_token = WETH
+                sender_addr = mev_addr
+                cycle.append([])
+            elif len(cycle[-1]) > 1 and record['to'] == mev_addr:
+                # remove last token,
+                search_token = record['token']
+                sender_addr = mev_addr
+            else:
+                search_token = None
+                sender_addr = record['to']
+        return cycle
+
+    def safe_remove_item(self, transfers, record):
+        return list(filter(lambda x: (x['id'] != record['id']), transfers)) # Safe remove
+
+    def search_token(self, transfers: list, token: str, from_add: str):
+        try:
+            if token is not None:
+                return list(filter(lambda x: x['token'] == token and x['from'] == from_add, transfers))[0]
+            return list(filter(lambda x: x['from'] == from_add, transfers))[0]
+        except:
+            print(transfers)
+            raise Exception()
+
 
     def detect_cycle(self, tx_hash):
         G = nx.DiGraph()
@@ -86,7 +123,7 @@ class CycleExtractor:
 
             event_sign = log.topics[0]
             if event_sign == TOPIC_ERC20_TRANSFER:
-                token = '0x' + str(log.address).lower()
+                token = str(log.address).lower()
                 src = '0x' + str(log.topics[1].hex())[24:].lower()
                 dst = '0x' + str(log.topics[2].hex())[24:].lower()
                 try:
@@ -96,7 +133,8 @@ class CycleExtractor:
                 except web3.exceptions.LogTopicError as e:
                     print('CycleExtractor ERROR:', f'{e}, tx={tx_hash} log={log.address}')
                     amount = None
-                transfers.append({'from': src, 'to': dst, 'token': token, 'amount': amount})
+                id = len(transfers) + 1
+                transfers.append({'id': id, 'from': src, 'to': dst, 'token': token, 'amount': amount})
                 G.add_edge(src, dst)
 
         cycles = list(nx.simple_cycles(G))
