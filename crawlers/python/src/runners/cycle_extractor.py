@@ -71,23 +71,51 @@ class CycleExtractor:
                 print('CycleExtractor:', 'processed result', result)
 
             sleep(1)
-            
-    def detect_cycle_2(self, transfers:list):
+
+    def detect_cycle_2(self, tx_hash):
+        transfers = []
+        try:
+            tx = self.w3.eth.get_transaction_receipt(tx_hash)
+        except Exception as e:
+            print('CycleExtractor:', f'{e}')
+            return
+
+        for log in tx.logs:
+            if len(log.topics) == 0:
+                continue
+
+            event_sign = log.topics[0]
+            if event_sign == TOPIC_ERC20_TRANSFER:
+                token = str(log.address).lower()
+                src = '0x' + str(log.topics[1].hex())[24:].lower()
+                dst = '0x' + str(log.topics[2].hex())[24:].lower()
+                try:
+                    event = self.erc20_contract.events['Transfer']
+                    args = event().process_log(log).args
+                    amount = str(args.value)
+                except web3.exceptions.LogTopicError as e:
+                    print('CycleExtractor ERROR:', f'{e}, tx={tx_hash} log={log.address}')
+                    amount = None
+                id = len(transfers) + 1
+                transfers.append({'id': id, 'from': src, 'to': dst, 'token': token, 'amount': amount})
+
         cycle = [[]]
         search_token = WETH
-        mev_addr = "0x00000000009e50a7ddb7a7b0e2ee6604fd120e49"
-        sender_addr = mev_addr # Change to to_addr of tx (MEV Bot)
+        mev_addr = str(tx.to).lower()
+        sender_addr = mev_addr
         while len(transfers) > 0:
             record = self.search_token(transfers, search_token, sender_addr)
             print("Cycle ", len(cycle), ' append token: ', record['token'], ' from:', record['from'])
             cycle[-1].append(record['token'])
             transfers  = self.safe_remove_item(transfers, record)
+            # Completed 1 cycle
             if len(cycle[-1]) > 1 and cycle[-1][0] == cycle[-1][-1]:
                 search_token = WETH
                 sender_addr = mev_addr
                 cycle.append([])
+            # Swap token to mev but it is not WETH
             elif len(cycle[-1]) > 1 and record['to'] == mev_addr:
-                # remove last token,
+                # remove duplicate token if need.
                 search_token = record['token']
                 sender_addr = mev_addr
             else:
@@ -96,7 +124,9 @@ class CycleExtractor:
         return cycle
 
     def safe_remove_item(self, transfers, record):
-        return list(filter(lambda x: (x['id'] != record['id']), transfers)) # Safe remove
+        # remove only one item in list ...
+        return list(filter(lambda x: (x['id'] != record['id']), transfers))
+
 
     def search_token(self, transfers: list, token: str, from_add: str):
         try:
