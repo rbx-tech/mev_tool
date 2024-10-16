@@ -18,7 +18,7 @@ class CycleExtractorTest(unittest.TestCase):
     def test_cycle_extract(self):
 
         tx_hashes = [
-            ('0x01e042eafc681e526afce3b609c4c439a3683b311ce41fd03b685ceb834e1ac7', 2),
+            ('0x99f3412e19a46d9449224bca366dadd233cb67221ea2038730f4f2222f7f84d2', 2),
             ('0x39cb800b80d5b7c419dbc23f2221a3f90bf7d4e3dbff11f9a740d826f9708ed1', 3),
             ('0x4fa4ed916fc72ff8b43868a924548af4084c7b761c6f075b70e5b1d32db69a80', 1),
             ('0xe0e3bd175c5218d94afa7e27b6df6fd544490880fd6bbeb1420c7b2d7343ad16', 3),
@@ -48,6 +48,8 @@ class CycleExtractorTest(unittest.TestCase):
             print("-" * 30)
             print(cycle)
 
-        # self.assertEqual(len(cycles), 2)
+        self.assertEqual(len(cycles), 2)
+
+
 if __name__ == '__main__':
     unittest.main()

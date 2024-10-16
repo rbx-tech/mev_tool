@@ -9,3 +9,10 @@ def chunk_list(the_list, chunk_size):
         result_list.append(the_list[:chunk_size])
         the_list = the_list[chunk_size:]
     return result_list
+
+
+def find_item(arr: list, func):
+    for i, item in enumerate(arr):
+        if func(i, item):
+            return i, item
+    return None

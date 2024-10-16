@@ -1,4 +1,5 @@
 from collections import defaultdict
+import json
 import os
 from time import sleep
 from pymongo import UpdateOne
@@ -6,7 +7,7 @@ from web3 import Web3
 import web3
 import web3.contract
 from src.mongo import MongoDb
-from src.utils import chunk_list, read_from_file
+from src.utils import chunk_list, find_item, read_from_file
 
 # Swap (index_topic_1 address sender, uint256 amount0In, uint256 amount1In, uint256 amount0Out, uint256 amount1Out, index_topic_2 address to)
 TOPIC_UNISWAP_V2 = bytes.fromhex("d78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822")
@@ -121,8 +122,29 @@ class CycleExtractor:
             i1, m1, amount1 = c[0]
             i2, m2, amount2 = c[1]
             if m1*int(amount1) + m2 * int(amount2) > 0:
-                cycles.append(transfers[i1:i2 + 1])
+                cycle = self.trace_back(to_addr, transfers, i1)
+                cycle = cycle + self.trace_back(to_addr, transfers, i2)
+                cycles.append(cycle)
         return cycles, transfers
+
+    def trace_back(self, to_addr: str, transfers: list, start_index: int):
+        start = transfers[start_index]
+        visited = []
+        cycle = []
+
+        def find_callback(i, x):
+            return i not in visited and x['from'] == start['to']
+
+        while (True):
+            result = find_item(transfers, find_callback)
+            if result is not None:
+                index, item = result
+                cycle.append(item)
+                visited.append(index)
+                start = item
+            if start['from'] == to_addr or start['to'] == to_addr:
+                break
+        return cycle
 
     def detect_cycle_2(self, tx_hash):
         transfers = []
