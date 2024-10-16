@@ -41,6 +41,13 @@ class CycleExtractorTest(unittest.TestCase):
                     print(f'\t{j}.', t['from'], '->', t['to'], '|', t['token'], t['amount'],)
             self.assertEqual(len(cycles), cycle_len)
 
+    def test_cycle_extract2(self):
+        tx_hash = '0x01e042eafc681e526afce3b609c4c439a3683b311ce41fd03b685ceb834e1ac7'
+        cycles = self.runner.detect_cycle_2(tx_hash)
+        for cycle in cycles:
+            print("-" * 30)
+            print(cycle)
 
+        # self.assertEqual(len(cycles), 2)
 if __name__ == '__main__':
     unittest.main()
