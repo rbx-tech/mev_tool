@@ -36,6 +36,7 @@ class CycleExtractor:
         self.erc20_contract: web3.contract.Contract = self.w3.eth.contract('', abi=abi_erc20)
 
     def run(self):
+        self.init()
         try:
             self._process()
         except KeyboardInterrupt:
@@ -112,15 +113,15 @@ class CycleExtractor:
                 continue
 
         cycles = []
-        for k in mev_transfers.keys():
-            chunks = chunk_list(mev_transfers[k], 2)
-            for c in chunks:
-                if len(c) != 2:
-                    continue
-                i1, m1, amount1 = c[0]
-                i2, m2, amount2 = c[1]
-                if m1*int(amount1) + m2 * int(amount2) > 0:
-                    cycles.append(transfers[i1:i2 + 1])
+        # for k in mev_transfers.keys():
+        chunks = chunk_list(mev_transfers[WETH], 2)
+        for c in chunks:
+            if len(c) != 2:
+                continue
+            i1, m1, amount1 = c[0]
+            i2, m2, amount2 = c[1]
+            if m1*int(amount1) + m2 * int(amount2) > 0:
+                cycles.append(transfers[i1:i2 + 1])
         return cycles, transfers
 
     def detect_cycle_2(self, tx_hash):
