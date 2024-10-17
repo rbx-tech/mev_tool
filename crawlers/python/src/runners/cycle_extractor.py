@@ -1,5 +1,8 @@
-from collections import defaultdict
 import json
+import traceback
+from typing import Tuple
+from collections import defaultdict
+from src.utils import is_valid_cycle, print_log
 import os
 from time import sleep
 from pymongo import UpdateOne
@@ -17,6 +20,8 @@ TOPIC_UNISWAP_V3 = bytes.fromhex("c42079f94a6350d7e6235f29174924f928cc2ac818eb64
 # Transfer (index_topic_1 address src, index_topic_2 address dst, uint256 wad)
 TOPIC_ERC20_TRANSFER = bytes.fromhex("ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
 WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+
+IGNORE_TOKENS = ['0x0000000000000000000000000000000000000000']
 
 
 class CycleExtractor:
@@ -46,112 +51,148 @@ class CycleExtractor:
     def _process(self):
         while (True):
             limit = self.db.get_info('cycles_extract_limit', 500)
-            txs = list(self.db.transactions.find({'transfers': {'$exists': 0}, 'tags': 'searcher', 'types': 'arbitrage'}, {'_id': 1}).limit(limit))
+            txs = list(self.db.transactions.find({'needExtractCycles': True}, {'_id': 1}).limit(limit))
             updates = []
             if (len(txs) > 0):
-                print('CycleExtractor:', f'start processing {len(txs)} txs....')
+                print_log('CycleExtractor:', f'start processing {len(txs)} txs....')
                 for tx in txs:
                     tx_hash = tx['_id']
-                    result = self.detect_cycles(tx_hash)
+                    try:
+                        result = self.detect_cycles(tx_hash)
+                    except Exception as e:
+                        print_log('CycleExtractor ERROR:', f'tx={tx_hash}', e)
+                        traceback.print_exc()
+                        continue
                     if result is None:
                         updates.append(UpdateOne(
                             {'_id': tx_hash},
                             {'$set': {'transfers': None, 'cycles': None}}))
                         continue
-                    cycles, transfers = result
 
-                    updates.append(UpdateOne(
-                        {'_id': tx_hash},
-                        {
-                            '$set': {
-                                'transfers': transfers,
-                                'cycles': cycles,
-                            }
-                        }))
+                    cycles, transfers = result
+                    invalid_cycles = []
+                    for i, cycle in enumerate(cycles or []):
+                        if not is_valid_cycle(cycle):
+                            invalid_cycles.append(i)
+
+                    set_map = {
+                        'transfers': transfers,
+                        'cycles': cycles or 'ERROR',
+                    }
+                    if len(invalid_cycles) > 0:
+                        set_map['invalid_cycles'] = invalid_cycles
+
+                    updates.append(UpdateOne({'_id': tx_hash}, {'$set': set_map}))
 
             if len(updates) > 0:
                 result = self.db.transactions.bulk_write(updates)
-                print('CycleExtractor:', 'processed result', result)
+                print_log('CycleExtractor:', 'processed result', result)
 
             sleep(1)
 
-    def detect_cycles(self, tx_hash):
+    def detect_cycles(self, tx_hash) -> Tuple[list[dict], list[dict]]:
         try:
-            tx_trace = self.w3_provider.make_request('trace_transaction', [tx_hash])
-            tx = self.w3.eth.get_transaction(tx_hash)
+            tx_receipt = self.w3.eth.get_transaction_receipt(tx_hash)
         except Exception as e:
-            print('CycleExtractor:', f'{e}')
+            print_log('CycleExtractor:', f'{e}')
             return
 
-        to_addr = str(tx.to).lower()
+        to_addr = str(tx_receipt['to']).lower()
         transfers = []
-        mev_transfers = defaultdict(lambda: [])
         i = 0
+        is_pass = False
         tokens = []
-        for trace in tx_trace['result']:
-            action = trace['action']
-            try:
-                func, args = self.erc20_contract.decode_function_input(action['input'])
-                if 'transfer' not in func.fn_name:
-                    continue
-                if args.get('sender'):
-                    src = str(args['sender']).lower()
-                else:
-                    src = str(action['from']).lower()
-                dst = str(args['recipient']).lower()
-                token = str(action['to']).lower()
-                tokens.append(token)
-                amount = str(args['amount'])
+        for log in tx_receipt['logs']:
+            if len(log.topics) == 0:
+                continue
+
+            event_sign = log.topics[0]
+            if event_sign == TOPIC_ERC20_TRANSFER:
+                token = str(log.address).lower()
+                if token not in tokens:
+                    tokens.append(token)
+                src = '0x' + str(log.topics[1].hex())[24:].lower()
+                dst = '0x' + str(log.topics[2].hex())[24:].lower()
+                amount = self.get_amount_from_log(log, tx_hash)
+                if amount is None:
+                    is_pass = True
                 info = {'from': src, 'to': dst, 'token': token, 'amount': amount}
-                if src not in tokens:
-                    if to_addr == src:
-                        mev_transfers[token].append((i, -1, amount))
-                    if to_addr == dst:
-                        mev_transfers[token].append((i, +1, amount))
                 transfers.append(info)
                 i += 1
-            except Exception as e:
-                continue
+
+        if is_pass:
+            return None, transfers
+
+        token_transfers = defaultdict(lambda: [])
+        cleaned_transfers = []
+        j = 0
+        excludes_tokens = IGNORE_TOKENS + tokens
+        for i, t in enumerate(transfers):
+            if (t['from'] not in excludes_tokens and t['to'] not in excludes_tokens) and t['token'] not in IGNORE_TOKENS:
+                cleaned_transfers.append(t)
+                amount = t['amount']
+                token = t['token']
+                if to_addr == t['from']:
+                    token_transfers[token].append((j, -1, amount))
+                if to_addr == t['to']:
+                    token_transfers[token].append((j, +1, amount))
+                j += 1
 
         cycles = []
-        # for k in mev_transfers.keys():
-        chunks = chunk_list(mev_transfers[WETH], 2)
-        for c in chunks:
-            if len(c) != 2:
+        for token in token_transfers.keys():
+            if len(token_transfers[token]) % 2 != 0:
                 continue
-            i1, m1, amount1 = c[0]
-            i2, m2, amount2 = c[1]
-            if m1*int(amount1) + m2 * int(amount2) > 0:
-                cycle = self.trace_back(to_addr, transfers, i1)
-                cycle = cycle + self.trace_back(to_addr, transfers, i2)
-                cycles.append(cycle)
+            chunks = chunk_list(token_transfers[token], 2)
+            visited = []
+            for c in chunks:
+                if len(c) != 2:
+                    continue
+                i1, m1, amount1 = c[0]
+                i2, m2, amount2 = c[1]
+                if m1*int(amount1) + m2 * int(amount2) > 0:
+                    start = i1 if m1 < 1 else i2
+                    cycle, visited_list = self.trace_back(to_addr, cleaned_transfers, start, visited)
+                    visited.extend(visited_list)
+                    cycles.append(cycle)
         return cycles, transfers
 
-    def trace_back(self, to_addr: str, transfers: list, start_index: int):
+    def get_amount_from_log(self, log, tx_hash):
+        try:
+            event = self.erc20_contract.events['Transfer']
+            args = event().process_log(log).args
+            return str(args.value)
+        except web3.exceptions.LogTopicError as e:
+            print_log('CycleExtractor ERROR:', f'{e}, tx={tx_hash} log={log.address}')
+            return None
+
+    def trace_back(self, to_addr: str, transfers: list, start_index: int, visited: list) -> tuple[list[dict], list]:
         start = transfers[start_index]
-        visited = []
-        cycle = []
+        token: str = start['token']
+        cycle = [{**start, 'transfer_index': start_index}]
 
         def find_callback(i, x):
             return i not in visited and x['from'] == start['to']
 
-        while (True):
-            result = find_item(transfers, find_callback)
-            if result is not None:
-                index, item = result
-                cycle.append(item)
+        loop = 0
+        while loop < 500:
+            loop += 1
+            try:
+                index, item = find_item(transfers, find_callback)
+                cycle.append({**item, 'transfer_index': index})
                 visited.append(index)
                 start = item
-            if start['from'] == to_addr or start['to'] == to_addr:
-                break
-        return cycle
+                if start['to'] == to_addr and start['token'] == token:
+                    break
+            except Exception:
+                continue
+        return cycle, visited
 
     def detect_cycle_2(self, tx_hash):
         transfers = []
         try:
             tx = self.w3.eth.get_transaction_receipt(tx_hash)
         except Exception as e:
-            print('CycleExtractor:', f'{e}')
+            print_log('CycleExtractor:', f'{e}')
             return
 
         for log in tx.logs:
@@ -168,7 +209,7 @@ class CycleExtractor:
                     args = event().process_log(log).args
                     amount = str(args.value)
                 except web3.exceptions.LogTopicError as e:
-                    print('CycleExtractor ERROR:', f'{e}, tx={tx_hash} log={log.address}')
+                    print_log('CycleExtractor ERROR:', f'{e}, tx={tx_hash} log={log.address}')
                     amount = None
                 id = len(transfers) + 1
                 transfers.append({'id': id, 'from': src, 'to': dst, 'token': token, 'amount': amount})
@@ -179,7 +220,7 @@ class CycleExtractor:
         sender_addr = mev_addr
         while len(transfers) > 0:
             record = self.search_token(transfers, search_token, sender_addr)
-            print("Cycle ", len(cycle), ' append token: ', record['token'], ' from:', record['from'])
+            print_log("Cycle ", len(cycle), ' append token: ', record['token'], ' from:', record['from'])
             cycle[-1].append(record['token'])
             transfers = self.safe_remove_item(transfers, record)
             # Completed 1 cycle
@@ -207,5 +248,5 @@ class CycleExtractor:
                 return list(filter(lambda x: x['token'] == token and x['from'] == from_add, transfers))[0]
             return list(filter(lambda x: x['from'] == from_add, transfers))[0]
         except:
-            print(transfers)
+            print_log(transfers)
             raise Exception()

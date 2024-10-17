@@ -1,4 +1,5 @@
 from src import RunnerManager
+from src.utils import print_log
 
 
 if __name__ == '__main__':
@@ -6,4 +7,4 @@ if __name__ == '__main__':
         manager = RunnerManager()
         manager.start()
     except KeyboardInterrupt:
-        print('Force stopped!')
+        print_log('Force stopped!')
