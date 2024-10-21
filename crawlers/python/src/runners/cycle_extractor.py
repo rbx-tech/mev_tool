@@ -214,10 +214,10 @@ class CycleExtractor:
                     amount = None
                 id = len(transfers) + 1
                 transfers.append({'id': id, 'from': src, 'to': dst, 'token': token, 'amount': amount})
-        
-        
-        
-        
+
+
+
+
         # Ignore send token to its contract
         transfers = list(filter(lambda x: x['to'] != '0x0000000000000000000000000000000000000000', transfers))
 
@@ -226,14 +226,15 @@ class CycleExtractor:
         mev_addr = str(tx.to).lower()
         sender_addr = mev_addr
         while len(transfers) > 0:
-            record = search_token(transfers, search_token, sender_addr)
+            record = self.search_token(transfers, search_token, sender_addr)
 
             if record == None and search_token == WETH and sender_addr == mev_addr:
                 print_log("Didn't found send weth to another Address")
                 break
 
-            transfers = safe_remove_item(transfers, record)
-            if record['token'] == record['to'] and search_token(transfers, search_token, sender_addr) is None:
+            transfers = self.safe_remove_item(transfers, record)
+
+            if record['token'] == record['to'] and self.search_token(transfers, search_token, sender_addr) is None:
                 # Burn token, don't append to cycle
                 print_log("Ignore ", len(cycle), ' from:', record['from'], ' to: ', record['to'], ' token: ', record['token'])
                 continue
