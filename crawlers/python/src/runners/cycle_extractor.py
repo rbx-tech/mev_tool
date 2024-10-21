@@ -1,7 +1,8 @@
 import json
 import traceback
-from typing import Tuple
+from typing import Tuple, Union
 from collections import defaultdict
+
 from src.utils import is_valid_cycle, print_log
 import os
 from time import sleep
@@ -213,21 +214,34 @@ class CycleExtractor:
                     amount = None
                 id = len(transfers) + 1
                 transfers.append({'id': id, 'from': src, 'to': dst, 'token': token, 'amount': amount})
-
+        
+        
+        
+        
         # Ignore send token to its contract
-        # transfers = list(filter(lambda x: x['token'] != x['to'], transfers))
+        transfers = list(filter(lambda x: x['to'] != '0x0000000000000000000000000000000000000000', transfers))
 
         cycle = [[]]
         search_token = WETH
         mev_addr = str(tx.to).lower()
         sender_addr = mev_addr
         while len(transfers) > 0:
-            record = self.search_token(transfers, search_token, sender_addr)
-            print_log("Cycle ", len(cycle), ' append token: ', record['token'], ' from:', record['from'])
-            cycle[-1].append(record['token'])
-            transfers = self.safe_remove_item(transfers, record)
+            record = search_token(transfers, search_token, sender_addr)
+
+            if record == None and search_token == WETH and sender_addr == mev_addr:
+                print_log("Didn't found send weth to another Address")
+                break
+
+            transfers = safe_remove_item(transfers, record)
+            if record['token'] == record['to'] and search_token(transfers, search_token, sender_addr) is None:
+                # Burn token, don't append to cycle
+                print_log("Ignore ", len(cycle), ' from:', record['from'], ' to: ', record['to'], ' token: ', record['token'])
+                continue
+
+            print_log("Cycle ", len(cycle), ' from:', record['from'], ' to: ', record['to'], ' append token: ', record['token'])
+            cycle[-1].append(record)
             # Completed 1 cycle
-            if len(cycle[-1]) > 1 and cycle[-1][0] == cycle[-1][-1]:
+            if len(cycle[-1]) > 1 and cycle[-1][0]['token'] == cycle[-1][-1]['token']:
                 search_token = WETH
                 sender_addr = mev_addr
                 cycle.append([])
@@ -239,17 +253,29 @@ class CycleExtractor:
             else:
                 search_token = None
                 sender_addr = record['to']
-        return cycle
 
-    def safe_remove_item(self, transfers, record):
+        return cycle if len(cycle[-1]) > 0 else cycle[:-1]
+
+    @staticmethod
+    def safe_remove_item(transfers: list, record: dict):
         # remove only one item in list ...
         return list(filter(lambda x: (x['id'] != record['id']), transfers))
 
-    def search_token(self, transfers: list, token: str, from_add: str):
+    @staticmethod
+    def search_token(transfers: list, token: str, from_add: str) -> Union[dict, None]:
         try:
             if token is not None:
-                return list(filter(lambda x: x['token'] == token and x['from'] == from_add, transfers))[0]
-            return list(filter(lambda x: x['from'] == from_add, transfers))[0]
+                record = list(filter(lambda x: x['token'] == token and x['from'] == from_add, transfers))
+            else:
+                record = list(filter(lambda x: x['from'] == from_add, transfers))
+            if len(record) == 0:
+                # handle case migrate token to other token. from: 0x0000000000000000000000000000000000000000
+                record =  list(filter(lambda x: x['token'] == from_add, transfers))
+            # if len(record) == 0:
+            #     record =  list(filter(lambda x: x['to'] == from_add and x['from'] == token, transfers))
+            return record[0] if len(record) > 0 else None
+
         except:
+            print_log("Search: FromAddr: {}, Token: {}".format(from_add, token))
             print_log(transfers)
             raise Exception()

@@ -10,3 +10,4 @@ mev_data/log
 mev_data/.idea
 mev_data/config
 mev_data/.env
+venv

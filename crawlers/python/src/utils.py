@@ -29,7 +29,7 @@ def is_valid_cycle(cycle: list[dict]):
     for i in range(0, len(cycle) - 1):
         s = cycle[i]
         d = cycle[i+1]
-        if s['to'] != d['from']:
+        if s['to'] != d['from'] and s['to'] != d['token']:
             return False
     first = cycle[0]
     last = cycle[-1]
