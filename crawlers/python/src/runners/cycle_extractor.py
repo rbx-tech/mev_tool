@@ -151,6 +151,9 @@ class CycleExtractor:
                 id = len(transfers) + 1
                 transfers.append({'id': id, 'from': src, 'to': dst, 'token': token, 'amount': amount})
 
+        # Ignore send token to its contract
+        # transfers = list(filter(lambda x: x['token'] != x['to'], transfers))
+
         cycle = [[]]
         search_token = WETH
         mev_addr = str(tx.to).lower()
@@ -185,5 +188,6 @@ class CycleExtractor:
                 return list(filter(lambda x: x['token'] == token and x['from'] == from_add, transfers))[0]
             return list(filter(lambda x: x['from'] == from_add, transfers))[0]
         except:
+            print("Search: ", token, "From:", from_add)
             print(transfers)
             raise Exception()
