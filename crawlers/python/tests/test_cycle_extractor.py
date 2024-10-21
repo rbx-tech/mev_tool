@@ -17,10 +17,7 @@ class CycleExtractorTest(unittest.TestCase):
     def run_test_cycle(self, tx_hash, cycle_cnt):
         print('-'*80)
         print(f'Detect cycles for tx {tx_hash}')
-        result = self.runner.detect_cycles(tx_hash)
-        self.assertIsNotNone(result)
-        cycles, _ = result
-        cycles = cycles or []
+        transfers, cycles = self.runner.detect_cycles_2(tx_hash)
 
         for i, cycle in enumerate(cycles, 1):
             is_ok = is_valid_cycle(cycle)
@@ -28,8 +25,8 @@ class CycleExtractorTest(unittest.TestCase):
                 print(f'Invalid cycle {i}')
             else:
                 print(f'Cycle {i}:')
-            for t in cycle:
-                j = t['transfer_index']
+            for j, t in enumerate(cycle):
+                # j = t['transfer_index']
                 print(f'\t{j}.', t['from'], '->', t['to'], '|', t['token'], t['amount'])
 
         self.assertEqual(len(cycles), cycle_cnt)
@@ -74,14 +71,9 @@ class CycleExtractorTest(unittest.TestCase):
         cycle_cnt = 1
         self.run_test_cycle(tx_hash, cycle_cnt)
 
-    # def test_cycle_extract2(self):
-    #     tx_hash = '0x01e042eafc681e526afce3b609c4c439a3683b311ce41fd03b685ceb834e1ac7'
-    #     cycles = self.runner.detect_cycle_2(tx_hash)
-    #     for cycle in cycles:
-    #         print("-" * 30)
-    #         print(cycle)
-
-    #     self.assertEqual(len(cycles), 2)
+    def test_cycle_extract2(self):
+        tx_hash = '0xaa4eacfc704b5483c1f932f2f6ab6e5c4ff969134e078ded8b6a4151fe3f09e8'
+        self.run_test_cycle(tx_hash, cycle_cnt=1)
 
 
 if __name__ == '__main__':
