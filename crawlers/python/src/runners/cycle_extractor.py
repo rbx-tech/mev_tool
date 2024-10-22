@@ -58,13 +58,11 @@ class CycleExtractor:
                     try:
                         result = self.detect_cycles_2(tx_hash)
                     except Exception as e:
-                        print_log('CycleExtractor ERROR:', f'tx={tx_hash}', e)
+                        print_log('CycleExtractor detect ERROR:', f'tx={tx_hash}', e)
                         traceback.print_exc()
-                        continue
-                    if result is None:
                         updates.append(UpdateOne(
                             {'_id': tx_hash},
-                            {'$set': {'transfers': None, 'cycles': None}}))
+                            {'$set': {'transfers': None, "cyclesError": str(e)}}))
                         continue
 
                     transfers, cycles = result
@@ -126,11 +124,7 @@ class CycleExtractor:
         while len(new_transfers) > 0:
             record = self.search_token(new_transfers, search_token, sender_addr)
 
-            # if record == None and search_token == WETH and sender_addr == mev_addr:
-            #     print_log('CycleExtractor ERROR:', f"Didn't found send weth to another Address tx={tx_hash}")
-            #     break
-
-            if record == None or (record == None and search_token == WETH and sender_addr == mev_addr):
+            if record == None and search_token == WETH and sender_addr == mev_addr:
                 print_log('CycleExtractor ERROR:', f"Didn't found send weth to another Address tx={tx_hash}")
                 break
 

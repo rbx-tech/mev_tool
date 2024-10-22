@@ -72,7 +72,7 @@ class CycleExtractorTest(unittest.TestCase):
         self.run_test_cycle(tx_hash, cycle_cnt)
 
     def test_cycle_extract2(self):
-        tx_hash = '0xaa4eacfc704b5483c1f932f2f6ab6e5c4ff969134e078ded8b6a4151fe3f09e8'
+        tx_hash = '0x44be0f2a7302655f851ee97017ee5a72b1b2c881986b67d0b24fbf2fb29c9191'
         self.run_test_cycle(tx_hash, cycle_cnt=1)
 
 
