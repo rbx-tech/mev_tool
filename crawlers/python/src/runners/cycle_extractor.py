@@ -62,7 +62,10 @@ class CycleExtractor:
                         traceback.print_exc()
                         updates.append(UpdateOne(
                             {'_id': tx_hash},
-                            {'$set': {'transfers': None, "cyclesError": str(e)}}))
+                            {'$set': {'transfers': None, 'needExtractCycles': False, "cyclesError": str(e)}}))
+                        continue
+
+                    if result is None:
                         continue
 
                     transfers, cycles = result
