@@ -44,6 +44,10 @@ class MongoDb:
     def pools(self):
         return self.db['pools']
 
+    @property    
+    def universal_analytics(self):
+        return self.db['universal_analytics']
+
     def switch_db(self, db_name=None):
         self.db = self.client.get_database(db_name)
 
