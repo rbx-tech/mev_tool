@@ -39,6 +39,10 @@ class MongoDb:
     @property
     def runners(self):
         return self.db['runners']
+    
+    @property
+    def pools(self):
+        return self.db['pools']
 
     def switch_db(self, db_name=None):
         self.db = self.client.get_database(db_name)

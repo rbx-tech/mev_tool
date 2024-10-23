@@ -1,3 +1,4 @@
 pymongo==4.10.1
 networkx
 web3
+pg8000
