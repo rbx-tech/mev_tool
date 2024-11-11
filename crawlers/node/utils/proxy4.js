@@ -17,7 +17,7 @@ export class Proxy4 {
 
   static async genRandomHost() {
     if (!Proxy4.hosts.length) {
-      const content = await fs.readFile('./resources/proxy_socks5.txt', { encoding: 'utf8' });
+      const content = await fs.readFile('../resources/proxy_socks5.txt', { encoding: 'utf8' });
       Proxy4.hosts = content.split('\n');
     }
     if (Proxy4.lastIndex >= Proxy4.hosts.length) {
