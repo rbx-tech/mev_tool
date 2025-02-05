@@ -1,0 +1,107 @@
+from dataclasses import dataclass
+from typing import List, Optional, Any
+
+from eth_abi import encode, decode
+from eth_utils import to_checksum_address, function_signature_to_4byte_selector
+
+
+@dataclass
+class ABIFunction:
+    name: Optional[str] = None
+    inputs: Optional[List[str]] = None
+    outputs: List[str] = None
+    constant: bool = False
+    payable: bool = False
+    selector: Optional[str] = None
+
+    @staticmethod
+    def func_selector(sig: str) -> bytes:
+        return function_signature_to_4byte_selector(sig)
+
+    def get_selector(self) -> bytes:
+        if self.selector:
+            return bytes.fromhex(self.selector.lstrip("0x"))
+        elif self.name:
+            return self.func_selector(self.get_signature())
+        else:
+            raise ValueError("Cannot compute selector without a name or selector")
+
+    def get_signature(self) -> str:
+        if self.name is None:
+            raise ValueError("Cannot compute signature without a name")
+
+        input_types = ""
+        if self.inputs:
+            input_types = ",".join(self.inputs)
+
+        return f"{self.name}({input_types})"
+
+    def encode_inputs(self, values: List[Any]) -> bytes:
+        selector = self.get_selector()
+        if self.inputs == []:
+            return selector
+        encoded_inputs = encode(self.inputs, values)
+        return selector + encoded_inputs
+
+    def decode_outputs(self, output_data: bytes) -> Any:
+        if not output_data or not self.outputs:
+            return None
+
+        if isinstance(output_data, str):
+            output_data = bytes.fromhex(output_data.lstrip("0x"))
+
+        try:
+            decoded = decode(self.outputs, output_data)
+            decoded = [
+                to_checksum_address(value) if typ == "address" else value
+                for value, typ in zip(decoded, self.outputs)
+            ]
+            if len(decoded) == 1:
+                return decoded[0]
+            return decoded
+        except Exception as e:
+            raise ValueError(
+                "Failed to decode outputs for function"
+                f" {self.name or self.selector}: {str(e)}"
+            )
+
+
+@dataclass
+class ContractABI:
+    functions: List[ABIFunction]
+    name: Optional[str] = None
+
+
+def parse_json_abi(abi: dict) -> ContractABI:
+    functions = []
+    for entry in abi:
+        if entry["type"] == "function":
+            name = entry["name"]
+            inputs = [collapse_if_tuple(inputs) for inputs in entry["inputs"]]
+            outputs = [collapse_if_tuple(outputs) for outputs in entry["outputs"]]
+            constant = entry["stateMutability"] in ("view", "pure")
+            payable = entry["stateMutability"] == "payable"
+            functions.append(
+                ABIFunction(
+                    name=name,
+                    inputs=inputs,
+                    outputs=outputs,
+                    constant=constant,
+                    payable=payable,
+                )
+            )
+    return ContractABI(functions)
+
+
+def collapse_if_tuple(abi: dict) -> str:
+    typ = abi["type"]
+    if not typ.startswith("tuple"):
+        return typ
+
+    delimited = ",".join(collapse_if_tuple(c) for c in abi["components"])
+    # Whatever comes after "tuple" is the array dims.  The ABI spec states that
+    # this will have the form "", "[]", or "[k]".
+    array_dim = typ[5:]
+    collapsed = "({}){}".format(delimited, array_dim)
+
+    return collapsed

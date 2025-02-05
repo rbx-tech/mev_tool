@@ -1,0 +1,6 @@
+asyncio
+uniswap-smart-path
+pyrevm
+web3
+eth_utils
+eth_abi
