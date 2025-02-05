@@ -118,8 +118,8 @@ export async function runCrawlEigenphyBundles() {
 
         if (Object.keys(bundleWrites).length) {
             const writes = Object.values(bundleWrites);
-            await mongoDb.bundlesCol.bulkWrite(writes);
-            console.log('Eigenphy', `Upserted ${writes.length} bundles`);
+            const result = await mongoDb.bundlesCol.bulkWrite(writes);
+            console.log('Eigenphy', `Upserted modified=${result.modifiedCount} inserted=${result.insertedCount} bundles`);
         }
         if (Object.keys(pools).length) {
             const existsIds = await mongoDb.poolsCol.distinct('_id', { _id: { $in: Object.keys(pools) } });
