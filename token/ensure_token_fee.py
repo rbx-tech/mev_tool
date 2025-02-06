@@ -4,8 +4,6 @@ from pyrevm import EVM, BlockEnv
 from web3 import Web3
 from contract import Contract
 from uniswap_smart_path import SmartPath
-from eth_abi import encode
-import time
 
 MY_ADDR = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"  # vitalik.eth
 BOT_ADDR = "0x66B8a48DD0A0F42A4f0cb8286ED796D41E664f07"  # vitalik.eth
@@ -30,7 +28,7 @@ class ERC20TokenFixedFee(ERC20Token):
 
 
 class CheckResult:
-    has_v2_pair: bool = True
+    router_type: str = "V2"
     fee_swap: int = 0
     fee_transfer: int = 0
     fee_recieve: int = 0
@@ -74,10 +72,10 @@ def setup_contract(evm, file_path) -> dict:
         revm=evm,
         abi_file_path="./abi/uniswapv2router.abi",
     )
-    contracts["UNIVERSAL_ROUTER"] = Contract(
-        "0x3fC91A3afd70395Cd496C647d5a6CC9d4B2b7FAD",
+    contracts["UNISWAP_V3_ROUTER"] = Contract(
+        "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
         revm=evm,
-        abi_file_path="./abi/universal_router.abi",
+        abi_file_path="./abi/uniswapv3router.abi",
     )
     contracts["UNISWAP_V2_FACTORY"] = Contract(
         "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
@@ -88,43 +86,40 @@ def setup_contract(evm, file_path) -> dict:
     return contracts, token_contracts
 
 
-async def get_swap_path(rpc_url: str, amount_in: int, token_in: str, token_out: str):
-    smart_path = await SmartPath.create(rpc_endpoint=rpc_url)
-    return await smart_path.get_swap_in_path(
-        amount_in,
-        Web3.to_checksum_address(token_in),
-        Web3.to_checksum_address(token_out),
-    )
+def execute_swap(router_type: str, router: Contract, path_info: dict, amount_in: int) -> tuple[int, int]:
+    """Execute swap using either V2 or V3 router directly"""
 
+    paths = path_info["path"]
+    if isinstance(paths, (list, tuple)):
+        path_addresses = paths
+    else:
+        path_addresses = [paths[0], paths[1]]
 
-def execute_universal_swap(
-    universal_router: Contract,
-    path_info: dict,
-    amount_in: int,
-    recipient: str,
-) -> tuple[int, int]:
-    """Execute swap based on the path information returned by SmartPath"""
+    # Calculate minimum output with 0.5% slippage tolerance
+    amount_out_min = 1
+    deadline = 2000000000  # Far future timestamp
 
-    if path_info["function"] == "V2_SWAP_EXACT_IN":
-        # V2 swap command
-        command = 0x08  # V2_SWAP_EXACT_IN command
-        paths = path_info["path"]
+    # print(f"Executing {router_type} swap with:")
+    # print(f"Amount in: {amount_in}")
+    # print(f"Min amount out: {amount_out_min}")
+    # print(f"Path: {path_addresses}")
 
-        types = ["address", "uint256", "uint256", "address[]", "bool"]
-        values = [
-            recipient,
+    if router_type == "V2":
+        # Use swapExactTokensForTokens for V2 token->token swaps
+        amount_out = router.swapExactTokensForTokens(
             amount_in,
-            1,  # amount out min
-            paths,
-            False,  # payerIsUser
-        ]
-        inputs = encode(types, values)
-
-    elif path_info["function"] == "V3_SWAP_EXACT_IN":
-        # V3 swap command
-        command = 0x00  # V3_SWAP_EXACT_IN command
-        paths = path_info["path"]
-
+            amount_out_min,
+            path_addresses,
+            MY_ADDR,  # recipient
+            deadline,
+            caller=MY_ADDR,
+        )
+        if len(amount_out) > 1:
+            return amount_in, amount_out[1]
+        else:
+            return amount_in, amount_out[0]
+    else:  # V3
+        # Encode the path for V3
         encoded_path = b""
         encoded_path += Web3.to_bytes(hexstr=paths[0])  # First token (20 bytes)
 
@@ -135,59 +130,51 @@ def execute_universal_swap(
             encoded_path += fee.to_bytes(3, "big")  # fee (3 bytes)
             encoded_path += Web3.to_bytes(hexstr=next_token)  # next token (20 bytes)
 
-        types = ["address", "uint256", "uint256", "bytes", "bool"]
-        values = [
-            recipient,
-            amount_in,
-            100,  # amount out min
-            encoded_path,
-            False,  # payerIsUser
-        ]
-        inputs = encode(types, values)
-    else:
-        raise ValueError(f"Unsupported swap function: {path_info['function']}")
-
-    # Execute the swap command
-    commands = command.to_bytes(1, "big")  # Single byte command
-
-    return universal_router.execute(commands, [inputs], caller=recipient)
+        amount_out = router.exactInput(
+            (
+                encoded_path,  # path
+                MY_ADDR,  # recipient
+                amount_in,  # amountIn
+                amount_out_min,  # amountOutMinimum
+            ),
+            caller=MY_ADDR,
+        )
+        return amount_in, amount_out
 
 
-async def check_token_fee(rpc_url: str, weth: Contract, token: Contract, contracts: dict[str, Contract]) -> CheckResult:
+async def check_token_fee(
+    smart_path: SmartPath,
+    weth: Contract,
+    token: Contract,
+    contracts: dict[str, Contract],
+) -> CheckResult:
     check_result = CheckResult()
     current_balance = token.balanceOf(MY_ADDR)
 
-    try:
-        # Try direct V2 path first
-        v2_router = contracts["UNISWAP_V2_ROUTER"]
-        amount_in, amount_out = v2_router.swapExactTokensForTokens(
-            1000000000,
-            1,
-            [weth.address, token.address],
-            MY_ADDR,
-            int(time.time()),
-            caller=MY_ADDR,
-        )
-    except Exception:
-        amount_in = 100000000
-        # If direct path fails, use SmartPath to find best route
-        paths = await get_swap_path(rpc_url, amount_in, weth.address, token.address)
-        if not paths:
-            check_result.has_v2_pair = False
-            check_result.status = "NO_SWAP_PATH_FOUND"
-            return check_result
+    amount_in = 10**14
+    # If direct path fails, use SmartPath to find best route
+    paths = await smart_path.get_swap_in_path(
+        amount_in,
+        Web3.to_checksum_address(weth.address),
+        Web3.to_checksum_address(token.address),
+    )
+    if not paths:
+        check_result.router_type = "None"
+        check_result.status = "NO_SWAP_PATH_FOUND"
+        return check_result
 
-        # Try paths in order they were returned
-        universal_router = contracts["UNIVERSAL_ROUTER"]
-        for path_info in paths:
-            try:
-                amount_in, amount_out = execute_universal_swap(universal_router, path_info, amount_in, MY_ADDR)
-                print(f"Used {path_info['function']} path with weight {path_info['weight']}")
-                break
-            except Exception as e:
-                print(f"ERROR {path_info['function']}: ", e)
-                check_result.status = "EXEC_SWAP_ERROR"
-                return check_result
+    # Try paths in order they were returned
+    for path_info in paths:
+        try:
+            router_type = "V2" if path_info["function"] == "V2_SWAP_EXACT_IN" else "V3"
+            check_result.router_type = router_type
+            router = contracts["UNISWAP_V2_ROUTER"] if router_type == "V2" else contracts["UNISWAP_V3_ROUTER"]
+            amount_in, amount_out = execute_swap(router_type, router, path_info, amount_in)
+            break
+        except Exception as e:
+            print(f"\033[91mERROR {token.symbol()}, {path_info['function']}: {e}\033[0m")  # Red color
+            check_result.status = "EXEC_SWAP_ERROR"
+            return check_result
 
     new_balance = token.balanceOf(MY_ADDR)
 
@@ -221,18 +208,38 @@ async def main():
     evm.set_block_env(blockEnv)
     contracts, token_contracts = setup_contract(evm, args.file_path)
 
+    # Deposit WETH
     contracts["WETH"].deposit(value=10**19, caller=MY_ADDR)
-    contracts["WETH"].approve(contracts["UNISWAP_V2_ROUTER"].address, 0x10000000000000000000, caller=MY_ADDR)
-    contracts["WETH"].approve(contracts["UNIVERSAL_ROUTER"].address, 0x10000000000000000000, caller=MY_ADDR)
+    MAX_UINT = 2**256 - 1
+    contracts["WETH"].approve(contracts["UNISWAP_V2_ROUTER"].address, MAX_UINT, caller=MY_ADDR)
+    contracts["WETH"].approve(contracts["UNISWAP_V3_ROUTER"].address, MAX_UINT, caller=MY_ADDR)
 
-    for name, token in token_contracts.items():
-        try:
-            result = await check_token_fee(args.rpc_url, contracts["WETH"], token, contracts)
-            print(
-                f"Token {name} V2Pair: {result.has_v2_pair}, FeeSwap: {result.fee_swap}, fee_transfer: {result.fee_transfer}, status: {result.status}"
-            )
-        except Exception as ex:
-            print("Token: ", name, " got error: ", ex)
+    # Check WETH balance
+    weth_balance = contracts["WETH"].balanceOf(MY_ADDR)
+    print(f"WETH balance before swap: {weth_balance}")
+
+    # Print table header
+    print(
+        "\n{:<20} | {:<4} | {:>8} | {:>12} | {:<10}".format("Token", "Router Type", "FeeSwap", "FeeTransfer", "Status")
+    )
+    print("-" * 55)  # Separator line
+
+    smart_path = await SmartPath.create(rpc_endpoint=args.rpc_url)
+    try:
+        for name, token in token_contracts.items():
+            try:
+                result = await check_token_fee(smart_path, contracts["WETH"], token, contracts)
+                print(
+                    "{:<20} | {:<4} | {:>8.2f} | {:>12.2f} | {:<10}".format(
+                        name, result.router_type, result.fee_swap, result.fee_transfer, result.status
+                    )
+                )
+            except Exception as ex:
+                print(f"\033[91mERROR {name}: {ex}\033[0m")
+    finally:
+        # Clean up any remaining resources
+        if hasattr(evm, "close"):
+            await evm.close()
 
 
 if __name__ == "__main__":
