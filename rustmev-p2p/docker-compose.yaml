@@ -1,0 +1,12 @@
+services:
+  rust:
+    container_name: mevp2p-rust
+    build: .
+    restart: always
+  
+  mongo:
+    container_name: mevp2p-mongo
+    image: mongo:latest
+    restart: always
+    ports:
+      - "27017:27017"

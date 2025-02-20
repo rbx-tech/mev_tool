@@ -1,0 +1,11 @@
+mongo_uri="mongodb://localhost:27017/devp2p"
+log_level="debug"
+
+
+[[chains]]
+ws_node = "ws://10.7.0.58:8746"
+chain_name = "Ronin"
+chain_id = 2020
+enable_sync = true
+enable_fetch = true
+rpc_nodes = ["http://10.7.0.58:8745"]

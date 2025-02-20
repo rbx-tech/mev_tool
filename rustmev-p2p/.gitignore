@@ -1,0 +1,6 @@
+/target
+.vscode
+.idea
+/bin
+/data
+config.toml
